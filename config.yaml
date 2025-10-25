@@ -1,0 +1,47 @@
+# Game Configuration
+# This file contains configurable parameters for the LieGraph game
+
+game:
+  # Number of players in the game (minimum 3)
+  player_count: 6
+
+  # Vocabulary pairs for the game
+  # Each pair contains (civilian_word, spy_word)
+  vocabulary:
+    - ["Shakespeare", "Dumas"]
+#    - ["太阳", "月亮"]
+#    - ["猫", "狗"]
+#    - ["咖啡", "茶"]
+#    - ["笔记本", "书"]
+
+  # List of possible player names for random generation
+  player_names:
+    - "Alice"
+    - "Bob"
+    - "Charlie"
+    - "David"
+    - "Eve"
+    - "Frank"
+    - "Grace"
+    - "Henry"
+    - "Ivy"
+    - "Jack"
+    - "Katherine"
+    - "Leo"
+    - "Mia"
+    - "Noah"
+    - "Olivia"
+    - "Peter"
+    - "Quinn"
+    - "Rachel"
+    - "Sam"
+    - "Tina"
+
+  # Game settings
+  settings:
+    # Minimum number of players required
+    min_players: 3
+    # Maximum number of players allowed
+    max_players: 8
+    # Maximum number of rounds per game
+    max_rounds: 8

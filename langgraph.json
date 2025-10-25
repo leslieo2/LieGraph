@@ -1,0 +1,10 @@
+{
+  "dependencies": [
+    "langgraph",
+    "."
+  ],
+  "graphs": {
+    "who_is_spy": "src.game.graph:build_workflow"
+  },
+  "env": "./.env"
+}

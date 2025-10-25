@@ -1,0 +1,22 @@
+[project]
+name = "liegraph"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain-community",
+    "langchain-core",
+    "langchain-openai",
+    "httpx[socks]",
+    "langgraph",
+    "langgraph-cli[inmem]",
+    "langchain-tavily",
+    "trustcall",
+    "python-dotenv",
+    "pytest",
+    "PyYAML"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
