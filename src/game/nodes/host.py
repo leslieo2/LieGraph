@@ -27,7 +27,6 @@ def host_setup(state: GameState) -> Dict[str, Any]:
     # Debug output
     print(f"🎮 Host: Initializing game, {len(player_list)} players")
     print(f"   Players: {player_list}")
-    # print(f"   Host private state keys: {list(assignments['host_private_state'].keys())}")
     for player_id, private_state in assignments["player_private_states"].items():
         print(f"   Player {player_id}: Assigned word = {private_state.assigned_word}")
 

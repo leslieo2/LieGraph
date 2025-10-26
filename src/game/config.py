@@ -1,6 +1,25 @@
 """
 Configuration management for the LieGraph game.
-Handles loading configuration from YAML files and providing defaults.
+
+This module provides centralized configuration management for the game,
+including player settings, vocabulary, and game balancing rules.
+
+Features:
+- YAML-based configuration with sensible defaults
+- Player count validation and spy count calculation
+- Vocabulary management with word pairs
+- Name pool management for consistent player naming
+- Game rule configuration for LLM interactions
+
+Configuration Sources:
+- config.yaml file in project root (if exists)
+- Built-in defaults for development and testing
+- Runtime validation to ensure configuration integrity
+
+Game Balancing:
+- Automatic spy count calculation based on player count
+- Vocabulary validation and selection
+- Player name pool management
 """
 
 import random

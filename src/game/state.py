@@ -1,3 +1,21 @@
+"""
+Game state management and data structures for the "Who Is Spy" game.
+
+This module defines:
+- Core data structures (TypedDicts and Pydantic models) for game state
+- Reducer functions for state merging and conflict resolution
+- Helper functions for state calculations and validations
+
+The state system uses LangGraph's annotated state approach with
+custom reducers for append-only lists and timestamp-based merging.
+
+Key Concepts:
+- GameState: Main shared state container with typed fields
+- Private states: Host and player-specific data managed separately
+- Reducers: Functions for merging concurrent state updates
+- Helper functions: Pure functions for state calculations
+"""
+
 import time
 import uuid
 from operator import add

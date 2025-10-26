@@ -1,3 +1,25 @@
+"""
+LLM-powered strategy and reasoning for the "Who Is Spy" game.
+
+This module implements the AI agent intelligence system that enables players to:
+- Dynamically infer their own identity through conversation analysis
+- Generate strategic speech based on confidence levels
+- Form suspicions about other players with confidence scores
+- Make voting decisions based on accumulated evidence
+
+Key Features:
+- Dynamic Identity Inference: Real-time role analysis through speech patterns
+- Probabilistic Belief System: Self-belief and suspicions with confidence scores
+- Strategic Speech Generation: Adaptive descriptions based on game phase
+- Multi-language Support: Automatic language detection and response generation
+
+Architecture:
+- Prompt Engineering: Static prefixes with dynamic context injection
+- Chain of Thought: Structured reasoning for identity inference
+- Confidence Calibration: Systematic confidence adjustment based on evidence
+- Logging: Debug logging for belief evolution tracking
+"""
+
 import json
 import os
 from datetime import datetime

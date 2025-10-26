@@ -1,3 +1,25 @@
+"""
+Player node implementations for the "Who Is Spy" game.
+
+This module contains the LangGraph nodes that handle player actions:
+- Speech generation with strategic reasoning
+- Voting decisions based on accumulated evidence
+- Private state management and mindset updates
+
+Each node represents a player's turn in the game flow and integrates
+with the LLM strategy system to provide intelligent agent behavior.
+
+Node Functions:
+- player_speech: Generates speech using LLM reasoning and updates mindset
+- player_vote: Makes voting decisions based on accumulated suspicions
+- Helper functions: Context retrieval and private state management
+
+Integration Points:
+- Uses LLM strategy module for intelligent reasoning
+- Integrates with state management for proper state updates
+- Follows LangGraph node patterns for workflow integration
+"""
+
 from datetime import datetime
 from typing import Dict, Any
 
@@ -19,7 +41,6 @@ from ..state import (
     PlayerMindset,
 )
 
-# In a real graph, this would be passed in or created via a factory
 _llm_client = llm_client
 
 
@@ -49,7 +70,7 @@ def _create_player_private_state_delta(
     )
 
     return PlayerPrivateState(
-        assigned_word=my_word,  # Preserve assigned_word
+        assigned_word=my_word,
         playerMindset=PlayerMindset(
             self_belief=updated_mindset.self_belief,
             suspicions=merge_probs(existing_suspicions, updated_mindset.suspicions),
@@ -118,10 +139,10 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     return {
         "completed_speeches": [
             speech_record
-        ],  # For 'add' reducer: adds the new speech to the list
+        ],
         "player_private_states": {
             player_id: delta_private
-        },  # For merging into player's private state
+        },
     }
 
 
@@ -134,7 +155,7 @@ def _decide_player_vote(
     Simplified vote decision logic:
     1. Determine own role (use opposite if confidence < 50%)
     2. Calculate scores for other players based on suspicions
-    3. Vote for player with highest score
+    3. Vote for player with the highest score
     """
 
     alive = alive_players(state)
@@ -217,7 +238,6 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     print(f"🗳️  PLAYER VOTE: {player_id} votes for: {voted_target}")
     print(f"   Self belief: {updated_mindset.self_belief}")
     print(f"   Suspicions: {updated_mindset.suspicions}")
-    # The 'why' reason is not directly available from PlayerMindset, remove or adjust if needed.
 
     # Prepare the state updates based on the decided vote and PlayerMindset
     ts = int(datetime.now().timestamp() * 1000)
@@ -232,5 +252,5 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
         "current_votes": new_votes,
         "player_private_states": {
             player_id: delta_private
-        },  # For merging into player's private state
+        },
     }

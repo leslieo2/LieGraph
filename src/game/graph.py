@@ -1,3 +1,22 @@
+"""
+LangGraph workflow orchestrator for the "Who Is Spy" game.
+
+This module defines the main state machine that orchestrates the game flow:
+- Game setup and role assignment
+- Sequential speaking phases
+- Concurrent voting phases
+- Game state transitions and win condition checking
+
+The workflow is built using LangGraph's StateGraph with conditional routing
+between different phases of the game.
+
+Architecture:
+- StateGraph manages the overall game state transitions
+- Conditional edges route between speaking and voting phases
+- Concurrent execution for voting, sequential for speaking
+- Private state management for player mindsets and game setup
+"""
+
 from functools import partial
 from uuid import uuid4
 
@@ -15,9 +34,21 @@ from src.game.config import get_config
 
 
 def route_from_stage(state: GameState) -> list[str] | str:
-    """Based on current phase and state, determine next node.
-    - Speaking phase: Return next player's node name
-    - Speaking ends: Enter voting phase, fan out to all players for voting
+    """Route to appropriate nodes based on current game phase.
+
+    This is the main conditional routing function that determines the next
+    step in the game flow based on the current phase.
+
+    Args:
+        state: Current game state containing phase information
+
+    Returns:
+        Single node name for speaking phase, or list of node names for voting phase
+
+    Routing Logic:
+        - Speaking phase: Routes to next player's speech node
+        - Voting phase: Routes to all alive players' vote nodes concurrently
+        - Unknown phase: Falls back to host_result for error handling
     """
     game_phase = state.get("game_phase")
     if game_phase == "speaking":
@@ -35,12 +66,38 @@ def route_from_stage(state: GameState) -> list[str] | str:
 
 
 def should_continue(state: GameState) -> str:
-    """host_result conditional branch: continue or end"""
+    """Determine if the game should continue or end.
+
+    This conditional function is used by the host_result node to decide
+    whether the game should proceed to another round or end.
+
+    Args:
+        state: Current game state
+
+    Returns:
+        "end" if there's a winner, "continue" otherwise
+    """
     return "end" if state.get("winner") else "continue"
 
 
 def build_workflow_with_players(players: list[str], *, checkpointer=None):
-    """Build workflow with specific players list."""
+    """Build the complete LangGraph workflow for a specific set of players.
+
+    This function constructs the entire state machine with all nodes and edges
+    configured for the given player list.
+
+    Args:
+        players: List of player IDs to include in the game
+        checkpointer: Optional checkpointer for state persistence
+
+    Returns:
+        Compiled LangGraph application ready for execution
+
+    Node Architecture:
+        - Host nodes: setup, stage switching, result handling
+        - Player nodes: speech and vote nodes for each player
+        - Transition nodes: vote counting and phase transitions
+    """
     workflow = StateGraph(GameState)
 
     # Register nodes

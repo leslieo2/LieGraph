@@ -1,6 +1,6 @@
 /**
- * LangGraph Server 客户端
- * 直接连接LangGraph Server，无需自定义后端
+ * LangGraph Server Client
+ * Direct connection to LangGraph Server without custom backend
  */
 
 import { Client } from '@langchain/langgraph-sdk';
@@ -15,7 +15,7 @@ class LangGraphClient {
   }
 
   /**
-   * 创建新游戏线程
+   * Create new game thread
    */
   async createGameThread() {
     try {
@@ -30,7 +30,7 @@ class LangGraphClient {
   }
 
   /**
-   * 启动游戏工作流
+   * Start game workflow
    */
   async startGame(civilian_word, spy_word) {
     if (!this.threadId) {
@@ -42,7 +42,7 @@ class LangGraphClient {
     };
 
     if (civilian_word && spy_word) {
-      input.host_private_state = {  // ✅ Correct
+      input.host_private_state = {
         civilian_word: civilian_word,
         spy_word: spy_word
       };
@@ -60,8 +60,8 @@ class LangGraphClient {
   }
 
   /**
-   * 将LangGraph状态转换为UI格式
-   * 直接使用后端返回的状态，无需额外计算
+   * Convert LangGraph state to UI format
+   * Directly use backend state without additional calculations
    */
   convertToUIFormat(state, stream = false) {
     if (!state) {
@@ -82,11 +82,11 @@ class LangGraphClient {
     };
 
     if (stream) {
-      // 在流模式下，我们需要合并状态而不是替换
+      // In streaming mode, we need to merge state rather than replace
       return (prevState) => ({
         ...prevState,
         ...baseState,
-        // 深度合并私有状态，确保不丢失数据
+        // Deep merge private states to ensure no data loss
         player_private_states: {
           ...prevState.player_private_states,
           ...Object.keys(baseState.player_private_states).reduce((acc, playerId) => ({
@@ -103,7 +103,7 @@ class LangGraphClient {
         }
       });
     } else {
-      // 在非流模式下，直接返回新状态
+      // In non-streaming mode, directly return new state
       return baseState;
     }
   }
@@ -111,7 +111,7 @@ class LangGraphClient {
 
 
   /**
-   * 获取默认状态
+   * Get default state
    */
   getDefaultState() {
     return {
@@ -129,7 +129,7 @@ class LangGraphClient {
 
 
   /**
-   * 重置游戏
+   * Reset game
    */
   async resetGame() {
     this.threadId = null;
