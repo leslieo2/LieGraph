@@ -1,4 +1,7 @@
 # LieGraph – An AI Agent-Driven "Who Is Spy" Game
+[English Version](README.md) | [中文版本](README_zh.md)
+
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg) ![uv](https://img.shields.io/badge/uv-ready-5A45FF.svg) ![CI Friendly](https://img.shields.io/badge/ci-friendly-success.svg) ![License](https://img.shields.io/badge/license-MIT-black.svg)
 
 LieGraph is a multi-agent implementation of the popular social deduction game "Who Is spy," built with LangGraph. It features AI agents that can reason, strategize, and interact in natural language to find the spy among them.
 
@@ -199,4 +202,4 @@ Contributions are welcome! Please:
 
 ## 📄 License
 
-MIT License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
