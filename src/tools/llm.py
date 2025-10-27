@@ -30,7 +30,7 @@ _PROVIDER_SETTINGS: dict[str, dict[str, Any]] = {
         "defaults": {
             "base_url": None,
             "model": "gpt-5-nano",
-            "temperature": 0.0,
+            "temperature": 0.7,
         },
     },
     "openrouter": {
@@ -43,7 +43,7 @@ _PROVIDER_SETTINGS: dict[str, dict[str, Any]] = {
         "defaults": {
             "base_url": "https://openrouter.ai/api/v1",
             "model": "anthropic/claude-haiku-4.5",
-            "temperature": 0.0,
+            "temperature": 0.7,
         },
     },
     "deepseek": {
@@ -56,7 +56,7 @@ _PROVIDER_SETTINGS: dict[str, dict[str, Any]] = {
         "defaults": {
             "base_url": "https://api.deepseek.com/v1",
             "model": "deepseek-chat",
-            "temperature": 0.0,
+            "temperature": 0.7,
         },
     },
 }
@@ -197,7 +197,7 @@ def create_llm(
         _resolve_value(
             temperature,
             env_names.get("temperature"),
-            defaults.get("temperature", 0.0),
+            defaults.get("temperature", 0.7),
             transform=_coerce_float,
         )
         or 0.0
