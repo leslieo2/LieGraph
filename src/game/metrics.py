@@ -333,7 +333,8 @@ class GameMetrics:
             "speech_diversity": speech_summary,
         }
 
-    def _trend(self, round_metrics: Dict[int, Dict[str, Optional[float]]], *, key: str):
+    @staticmethod
+    def _trend(round_metrics: Dict[int, Dict[str, Optional[float]]], *, key: str):
         if not round_metrics:
             return None
 
@@ -347,7 +348,8 @@ class GameMetrics:
             return None
         return last - first
 
-    def _summarize_speeches(self, speeches: List[SpeechRecord]) -> Dict[str, Any]:
+    @staticmethod
+    def _summarize_speeches(speeches: List[SpeechRecord]) -> Dict[str, Any]:
         if not speeches:
             return {
                 "average_diversity": 0.0,
@@ -471,7 +473,8 @@ class GameMetrics:
             "by_player": per_player,
         }
 
-    def _compute_functional_score(self, summary: Dict[str, Any]) -> Dict[str, float]:
+    @staticmethod
+    def _compute_functional_score(summary: Dict[str, Any]) -> Dict[str, float]:
         win_balance = summary.get("win_balance_score", 0.0)
         identification = summary.get("identification", {})
         speech = summary.get("speech_diversity", {})
@@ -501,7 +504,8 @@ class GameMetrics:
             "speech_diversity": round(speech_component, 4),
         }
 
-    def _format_summary_for_llm(self, summary: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _format_summary_for_llm(summary: Dict[str, Any]) -> Dict[str, Any]:
         """Format metrics into an instruction for an LLM reviewer."""
         instructions = (
             "You are evaluating the quality of repeated 'Who Is Spy' games. "
@@ -524,7 +528,12 @@ class GameMetrics:
 
     def _persist_overall_metrics(self) -> None:
         path = self._output_dir / "overall.json"
-        payload = self.get_overall_metrics()
+        summary = self.get_overall_metrics()
+        score = self._compute_functional_score(summary)
+        payload = {
+            "metrics": summary,
+            "quality_score": score,
+        }
         with path.open("w", encoding="utf-8") as fp:
             json.dump(payload, fp, ensure_ascii=False, indent=2)
 

@@ -27,7 +27,7 @@ from typing import List, Dict, Any, Sequence
 
 from trustcall import create_extractor
 
-from src.game.state import GameState, Speech, PlayerMindset, Suspicion, Vote, SelfBelief
+from src.game.state import GameState, Speech, PlayerMindset, Suspicion, SelfBelief
 from src.tools.llm import create_llm
 
 # Game rules are now managed by the configuration system

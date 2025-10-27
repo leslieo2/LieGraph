@@ -15,6 +15,7 @@ LieGraph 是基于 LangGraph 构建的流行社交推理游戏 "谁是卧底" �
 - **自然语言交互:** 智能体在整个游戏中以自然语言进行交流和推理
 - **概率信念系统:** 具有自我信念置信度和怀疑矩阵的复杂信念追踪系统
 - **战略推理:** 高级的虚张声势检测、联盟形成和长期规划
+- **内建指标:** 自动追踪胜率平衡、身份识别准确率与发言多样性，并生成 JSON 报告以供后续提示词评估使用
 
 ## 🚀 快速开始
 
@@ -31,6 +32,31 @@ LieGraph 是基于 LangGraph 构建的流行社交推理游戏 "谁是卧底" �
 ```bash
 touch .env
 ```
+
+## 📊 指标与评估
+
+项目内置一个轻量的指标收集器（`src/game/metrics.py`），在游戏过程中实时记录以下指标：
+
+- **胜率平衡：** 跟踪平民与卧底胜率以及目标为 50/50 的公平度得分。
+- **身份识别准确率：** 监测玩家对自身及他人身份判断的准确趋势。
+- **发言多样性：** 按回合统计词汇多样性，帮助发现重复或单调的发言。
+
+当游戏结束时，指标会自动写入：
+
+- 单局摘要：`logs/metrics/{game_id}.json`
+- 全局聚合与函数版总分：`logs/metrics/overall.json`
+
+如需在代码中获取实时数据，可直接调用：
+
+```python
+from src.game.metrics import metrics_collector
+
+report = metrics_collector.get_overall_metrics()
+score = metrics_collector.compute_quality_score()  # 函数评分
+# metrics_collector.compute_quality_score(method="llm", llm=client) 可获取 LLM 评价
+```
+
+这些成果可以直接用于后续的提示词评估或离线分析流程。
 
 **OpenAI 配置示例:**
 ```

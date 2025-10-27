@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 try:  # Imported lazily so pure-Python usage works without IPython.
     from IPython import get_ipython

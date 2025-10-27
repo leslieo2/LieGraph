@@ -14,6 +14,7 @@ LieGraph is a multi-agent implementation of the popular social deduction game "W
 - **Natural Language Interaction:** Agents communicate and reason in natural language throughout the game
 - **Probabilistic Belief System:** Sophisticated belief tracking with self-belief confidence and suspicions matrix
 - **Strategic Reasoning:** Advanced bluff detection, alliance formation, and long-term planning
+- **Built-in Metrics:** Automatic quality tracking for win balance, identification accuracy, and speech diversity with JSON reports for prompt evaluation workflows
 
 ## 🚀 Quick Start
 
@@ -157,6 +158,31 @@ game:
     - "Bob"
     # ...
 ```
+
+## 📊 Metrics & Evaluation
+
+LieGraph ships with a lightweight metrics collector (`src/game/metrics.py`) that records quality indicators as games unfold:
+
+- **Win balance:** Civilian vs. spy win rates and a fairness score targeting 50/50 outcomes.
+- **Identification accuracy:** Tracks how confidently players identify their own roles and others over time.
+- **Speech diversity:** Measures lexical variety per speech turn to surface repetitive phrasing.
+
+Metrics are streamed to memory during play and automatically persisted when a game ends:
+
+- Per-game summaries: `logs/metrics/{game_id}.json`
+- Rolling aggregate + functional quality score: `logs/metrics/overall.json`
+
+You can also access the live collector from code:
+
+```python
+from src.game.metrics import metrics_collector
+
+audit = metrics_collector.get_overall_metrics()
+score = metrics_collector.compute_quality_score()  # deterministic
+# metrics_collector.compute_quality_score(method="llm", llm=client) for LLM-based review
+```
+
+These outputs are ready to feed into downstream prompt-evaluation or offline analysis pipelines.
 
 ## 🛠️ Development
 

@@ -22,10 +22,10 @@ Game Balancing:
 - Player name pool management
 """
 
-import random
-from typing import List, Tuple
-import yaml
 import os
+from typing import List, Tuple
+
+import yaml
 
 
 class GameConfig:
@@ -50,7 +50,8 @@ class GameConfig:
             # Return default configuration
             return self._get_default_config()
 
-    def _get_default_config(self) -> dict:
+    @staticmethod
+    def _get_default_config() -> dict:
         """Get default configuration."""
         return {
             "game": {
