@@ -31,6 +31,7 @@ from ..llm_strategy import (
     merge_probs,
     llm_client,  # Use the real LLM client
 )
+from ..metrics import metrics_collector
 from ..state import (
     GameState,
     alive_players,
@@ -132,6 +133,21 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
 
     # Prepare the state updates based on the generated speech and PlayerMindset
     speech_record: Speech = create_speech_record(state, player_id, new_speech_text)
+
+    metrics_collector.on_player_mindset_update(
+        game_id=state.get("game_id"),
+        round_number=state["current_round"],
+        phase=state["game_phase"],
+        player_id=player_id,
+        mindset=updated_mindset,
+    )
+    metrics_collector.on_speech(
+        game_id=state.get("game_id"),
+        round_number=state["current_round"],
+        player_id=player_id,
+        content=new_speech_text,
+    )
+
     delta_private = _create_player_private_state_delta(
         updated_mindset, cur_player_context, my_word
     )
@@ -241,6 +257,15 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
 
     # Prepare the state updates based on the decided vote and PlayerMindset
     ts = int(datetime.now().timestamp() * 1000)
+
+    metrics_collector.on_player_mindset_update(
+        game_id=state.get("game_id"),
+        round_number=state["current_round"],
+        phase=state["game_phase"],
+        player_id=player_id,
+        mindset=updated_mindset,
+    )
+
     delta_private = _create_player_private_state_delta(
         updated_mindset, cur_player_context, my_word
     )

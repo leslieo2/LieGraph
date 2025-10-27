@@ -1,6 +1,7 @@
 from typing import Dict, Any, cast
 
 from ..config import get_config
+from ..metrics import metrics_collector
 from ..state import GameState, next_alive_player, generate_phase_id
 from ..rules import (
     assign_roles_and_words,
@@ -29,6 +30,12 @@ def host_setup(state: GameState) -> Dict[str, Any]:
     print(f"   Players: {player_list}")
     for player_id, private_state in assignments["player_private_states"].items():
         print(f"   Player {player_id}: Assigned word = {private_state.assigned_word}")
+
+    metrics_collector.on_game_start(
+        game_id=state.get("game_id"),
+        players=player_list,
+        player_roles=assignments["host_private_state"]["player_roles"],
+    )
 
     # These private states will be merged by the graph runner
     game_setup_state = {
@@ -95,6 +102,10 @@ def host_result(state: GameState) -> Dict[str, Any]:
 
     if winner:
         print(f"🎮 Host announces result: Game over! Winner: {winner}")
+        metrics_collector.on_game_end(
+            game_id=state.get("game_id"),
+            winner=winner,
+        )
         update = {"game_phase": "result", "winner": winner}
         if eliminated_player:
             update["eliminated_players"] = [eliminated_player]
