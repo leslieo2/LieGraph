@@ -153,12 +153,8 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     )
 
     return {
-        "completed_speeches": [
-            speech_record
-        ],
-        "player_private_states": {
-            player_id: delta_private
-        },
+        "completed_speeches": [speech_record],
+        "player_private_states": {player_id: delta_private},
     }
 
 
@@ -275,7 +271,5 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
 
     return {
         "current_votes": new_votes,
-        "player_private_states": {
-            player_id: delta_private
-        },
+        "player_private_states": {player_id: delta_private},
     }

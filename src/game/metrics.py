@@ -16,6 +16,7 @@ score computation—lives here.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from statistics import mean
 from typing import Any, Dict, Iterable, List, Optional
@@ -23,6 +24,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import json
 import re
 from pathlib import Path
+from threading import Lock
 
 from .state import PlayerMindset
 
@@ -83,9 +85,25 @@ class GameMetrics:
     def __init__(self) -> None:
         self.completed_games: List[Dict[str, Any]] = []
         self.win_counts: Counter[str] = Counter()
-        self._current_game: Optional[Dict[str, Any]] = None
+        self._active_games: Dict[str, Dict[str, Any]] = {}
         self._output_dir = BASE_DIR / "logs" / "metrics"
         self._output_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = Lock()
+
+    def reset(self) -> None:
+        """Reset all in-memory aggregates for a fresh metrics run."""
+        with self._lock:
+            self.completed_games.clear()
+            self.win_counts.clear()
+            self._active_games.clear()
+
+    def _resolve_game_key(self, game_id: str | None) -> Optional[str]:
+        """Resolve a game identifier within a locked context."""
+        if game_id and game_id in self._active_games:
+            return game_id
+        if game_id is None and len(self._active_games) == 1:
+            return next(iter(self._active_games))
+        return None
 
     # ------------------------------------------------------------------ #
     # Event hooks
@@ -102,22 +120,21 @@ class GameMetrics:
         if not players or not player_roles:
             return
 
-        target_game_id = game_id or f"game-{len(self.completed_games) + 1}"
-
-        if self._current_game:
-            active_id = self._current_game.get("game_id")
-            if active_id == target_game_id:
+        with self._lock:
+            target_game_id = game_id or (
+                f"game-{len(self.completed_games) + len(self._active_games) + 1}"
+            )
+            if target_game_id in self._active_games:
                 return
-            self._finalize_current_game()
 
-        self._current_game = {
-            "game_id": target_game_id,
-            "players": list(players),
-            "roles": dict(player_roles),
-            "mindset_records": [],
-            "speech_records": [],
-            "winner": None,
-        }
+            self._active_games[target_game_id] = {
+                "game_id": target_game_id,
+                "players": list(players),
+                "roles": dict(player_roles),
+                "mindset_records": [],
+                "speech_records": [],
+                "winner": None,
+            }
 
     def on_player_mindset_update(
         self,
@@ -129,46 +146,51 @@ class GameMetrics:
         mindset: PlayerMindset,
     ) -> None:
         """Record identification accuracy as players update their mindset."""
-        game = self._ensure_current(game_id)
-        if not game or player_id not in game["roles"]:
-            return
+        with self._lock:
+            game_key = self._resolve_game_key(game_id)
+            if game_key is None:
+                return
 
-        roles = game["roles"]
-        records: List[MindsetRecord] = game["mindset_records"]
+            game = self._active_games.get(game_key)
+            if not game or player_id not in game["roles"]:
+                return
 
-        self_accuracy = self._accuracy_score(
-            actual_role=roles[player_id],
-            predicted_role=mindset.self_belief.role,
-            confidence=mindset.self_belief.confidence,
-        )
+            roles = game["roles"]
+            records: List[MindsetRecord] = game["mindset_records"]
 
-        suspicion_scores: List[float] = []
-        for other_id, suspicion in mindset.suspicions.items():
-            if other_id not in roles:
-                continue
-            suspicion_scores.append(
-                self._accuracy_score(
-                    actual_role=roles[other_id],
-                    predicted_role=suspicion.role,
-                    confidence=suspicion.confidence,
+            self_accuracy = self._accuracy_score(
+                actual_role=roles[player_id],
+                predicted_role=mindset.self_belief.role,
+                confidence=mindset.self_belief.confidence,
+            )
+
+            suspicion_scores: List[float] = []
+            for other_id, suspicion in mindset.suspicions.items():
+                if other_id not in roles:
+                    continue
+                suspicion_scores.append(
+                    self._accuracy_score(
+                        actual_role=roles[other_id],
+                        predicted_role=suspicion.role,
+                        confidence=suspicion.confidence,
+                    )
+                )
+
+            suspicion_accuracy = (
+                sum(suspicion_scores) / len(suspicion_scores)
+                if suspicion_scores
+                else None
+            )
+
+            records.append(
+                MindsetRecord(
+                    round_number=round_number,
+                    phase=phase,
+                    player_id=player_id,
+                    self_accuracy=self_accuracy,
+                    suspicion_accuracy=suspicion_accuracy,
                 )
             )
-
-        suspicion_accuracy = (
-            sum(suspicion_scores) / len(suspicion_scores)
-            if suspicion_scores
-            else None
-        )
-
-        records.append(
-            MindsetRecord(
-                round_number=round_number,
-                phase=phase,
-                player_id=player_id,
-                self_accuracy=self_accuracy,
-                suspicion_accuracy=suspicion_accuracy,
-            )
-        )
 
     def on_speech(
         self,
@@ -179,41 +201,52 @@ class GameMetrics:
         content: str,
     ) -> None:
         """Capture lexical diversity for each speech."""
-        game = self._ensure_current(game_id)
-        if not game:
-            return
+        with self._lock:
+            game_key = self._resolve_game_key(game_id)
+            if game_key is None:
+                return
 
-        tokens = _tokenize(content)
-        total = len(tokens)
-        unique = len(set(tokens)) if tokens else 0
-        diversity = unique / total if total else 0.0
+            game = self._active_games.get(game_key)
+            if not game:
+                return
 
-        speeches: List[SpeechRecord] = game["speech_records"]
-        speeches.append(
-            SpeechRecord(
-                round_number=round_number,
-                player_id=player_id,
-                unique_tokens=unique,
-                total_tokens=total,
-                diversity=diversity,
+            tokens = _tokenize(content)
+            total = len(tokens)
+            unique = len(set(tokens)) if tokens else 0
+            diversity = unique / total if total else 0.0
+
+            speeches: List[SpeechRecord] = game["speech_records"]
+            speeches.append(
+                SpeechRecord(
+                    round_number=round_number,
+                    player_id=player_id,
+                    unique_tokens=unique,
+                    total_tokens=total,
+                    diversity=diversity,
+                )
             )
-        )
 
     def on_game_end(self, *, game_id: str | None, winner: str | None) -> None:
         """Finalize metrics for the current game."""
-        game = self._ensure_current(game_id)
-        if not game:
-            return
+        with self._lock:
+            game_key = self._resolve_game_key(game_id)
+            if game_key is None:
+                return
 
-        game["winner"] = winner
-        if winner:
-            self.win_counts[winner] += 1
+            game = self._active_games.pop(game_key, None)
+            if not game:
+                return
+
+            game["winner"] = winner
+            if winner:
+                self.win_counts[winner] += 1
 
         summary = self._summarize_game(game)
-        self.completed_games.append(summary)
+        with self._lock:
+            self.completed_games.append(summary)
+
         self._persist_game_summary(summary)
         self._persist_overall_metrics()
-        self._current_game = None
 
     # ------------------------------------------------------------------ #
     # Public reporting API
@@ -221,9 +254,13 @@ class GameMetrics:
 
     def get_overall_metrics(self) -> Dict[str, Any]:
         """Aggregate metrics across all completed games."""
-        total_games = len(self.completed_games)
-        civilian_wins = self.win_counts.get("civilians", 0)
-        spy_wins = self.win_counts.get("spies", 0)
+        with self._lock:
+            completed_games = list(self.completed_games)
+            win_counts = self.win_counts.copy()
+
+        total_games = len(completed_games)
+        civilian_wins = win_counts.get("civilians", 0)
+        spy_wins = win_counts.get("spies", 0)
 
         win_rate = {
             "civilians": civilian_wins / total_games if total_games else 0.0,
@@ -234,8 +271,8 @@ class GameMetrics:
         if total_games:
             win_balance_score = 1.0 - abs(win_rate["civilians"] - win_rate["spies"])
 
-        identification = self._aggregate_identification_metrics()
-        speech_diversity = self._aggregate_speech_metrics()
+        identification = self._aggregate_identification_metrics(completed_games)
+        speech_diversity = self._aggregate_speech_metrics(completed_games)
 
         return {
             "games_played": total_games,
@@ -243,7 +280,7 @@ class GameMetrics:
             "win_balance_score": _clamp(win_balance_score),
             "identification": identification,
             "speech_diversity": speech_diversity,
-            "game_summaries": list(self.completed_games),
+            "game_summaries": list(completed_games),
         }
 
     def compute_quality_score(
@@ -277,13 +314,6 @@ class GameMetrics:
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _ensure_current(self, game_id: str | None) -> Optional[Dict[str, Any]]:
-        if self._current_game is None:
-            return None
-        if game_id is None or self._current_game.get("game_id") == game_id:
-            return self._current_game
-        return None
-
     @staticmethod
     def _accuracy_score(
         *,
@@ -314,9 +344,7 @@ class GameMetrics:
         for round_number, records in sorted(round_groups.items()):
             per_round[round_number] = {
                 "self_accuracy": _safe_mean(r.self_accuracy for r in records),
-                "suspicion_accuracy": _safe_mean(
-                    r.suspicion_accuracy for r in records
-                ),
+                "suspicion_accuracy": _safe_mean(r.suspicion_accuracy for r in records),
             }
 
         self_trend = self._trend(per_round, key="self_accuracy")
@@ -338,7 +366,9 @@ class GameMetrics:
         if not round_metrics:
             return None
 
-        ordered_rounds = [r for r in sorted(round_metrics) if round_metrics[r].get(key) is not None]
+        ordered_rounds = [
+            r for r in sorted(round_metrics) if round_metrics[r].get(key) is not None
+        ]
         if len(ordered_rounds) < 2:
             return None
 
@@ -381,8 +411,10 @@ class GameMetrics:
             "by_player": per_player,
         }
 
-    def _aggregate_identification_metrics(self) -> Dict[str, Any]:
-        if not self.completed_games:
+    def _aggregate_identification_metrics(
+        self, completed_games: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        if not completed_games:
             return {
                 "average_self_accuracy": 0.0,
                 "average_suspicion_accuracy": 0.0,
@@ -395,7 +427,7 @@ class GameMetrics:
         self_trends = []
         suspicion_trends = []
 
-        for game in self.completed_games:
+        for game in completed_games:
             round_metrics = game.get("round_metrics", {})
             if round_metrics:
                 self_scores.extend(
@@ -422,8 +454,10 @@ class GameMetrics:
             "suspicion_accuracy_trend": _safe_mean(suspicion_trends),
         }
 
-    def _aggregate_speech_metrics(self) -> Dict[str, Any]:
-        if not self.completed_games:
+    def _aggregate_speech_metrics(
+        self, completed_games: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        if not completed_games:
             return {
                 "average_diversity": 0.0,
                 "average_unique_tokens": 0.0,
@@ -436,7 +470,7 @@ class GameMetrics:
         total_tokens = []
         by_player: Dict[str, List[Dict[str, float]]] = defaultdict(list)
 
-        for game in self.completed_games:
+        for game in completed_games:
             speech_summary = game.get("speech_diversity", {})
             global_diversity = speech_summary.get("average_diversity")
             global_unique = speech_summary.get("average_unique_tokens")
@@ -537,18 +571,118 @@ class GameMetrics:
         with path.open("w", encoding="utf-8") as fp:
             json.dump(payload, fp, ensure_ascii=False, indent=2)
 
-    def _finalize_current_game(self) -> None:
-        """Clean up stale game state when a new game starts unexpectedly."""
-        if not self._current_game:
-            return
-        summary = self._summarize_game(self._current_game)
-        self.completed_games.append(summary)
-        self._persist_game_summary(summary)
-        self._persist_overall_metrics()
-        self._current_game = None
-
 
 # Global collector used by the rest of the codebase.
 metrics_collector = GameMetrics()
 
-__all__ = ["GameMetrics", "metrics_collector"]
+MULTILINGUAL_VOCABULARY_BATCH: List[tuple[str, tuple[str, str]]] = [
+    ("english", ("lighthouse", "windmill")),
+    ("chinese", ("海洋", "湖泊")),
+    ("spanish", ("sol", "luna")),
+    ("french", ("fromage", "yaourt")),
+    ("german", ("wald", "garten")),
+]
+
+
+def _run_single_multilingual_game(
+    players: tuple[str, ...],
+    idx: int,
+    language_tag: str,
+    civilian_word: str,
+    spy_word: str,
+) -> None:
+    """Execute a single multilingual game with the provided vocabulary pair."""
+
+    # Local imports keep heavy dependencies scoped per execution thread.
+    from langchain_core.runnables import RunnableConfig
+
+    from .graph import build_workflow_with_players
+
+    player_list = list(players)
+    app = build_workflow_with_players(player_list)
+
+    game_id = f"metrics-{idx}-{language_tag}"
+    print(
+        f"\nStarting game {idx}/5 ({language_tag}) with civilian='{civilian_word}' and spy='{spy_word}'"
+    )
+
+    initial_state = {
+        "game_id": game_id,
+        "players": player_list,
+        "game_phase": "setup",
+        "host_private_state": {
+            "civilian_word": civilian_word,
+            "spy_word": spy_word,
+        },
+    }
+
+    run_config = RunnableConfig(configurable={"thread_id": game_id})
+    app.invoke(initial_state, config=run_config)
+
+
+def run_multilingual_metrics_batch(
+    *, concurrent: bool = False, max_workers: Optional[int] = None
+) -> Dict[str, Any]:
+    """Run five games over distinct vocabulary pairs and log resulting metrics.
+
+    Args:
+        concurrent: When True, run games in parallel threads.
+        max_workers: Optional override for the number of worker threads when
+            running concurrently. Defaults to the number of vocabulary pairs.
+    """
+
+    from .config import get_config
+
+    metrics_collector.reset()
+
+    config = get_config()
+    players = tuple(config.generate_player_names())
+    batch = list(MULTILINGUAL_VOCABULARY_BATCH)
+
+    if concurrent:
+        worker_count = max_workers or len(batch)
+        with ThreadPoolExecutor(
+            max_workers=worker_count, thread_name_prefix="metrics"
+        ) as executor:
+            futures = [
+                executor.submit(
+                    _run_single_multilingual_game,
+                    players,
+                    idx,
+                    language_tag,
+                    civilian_word,
+                    spy_word,
+                )
+                for idx, (language_tag, (civilian_word, spy_word)) in enumerate(
+                    batch, start=1
+                )
+            ]
+            for future in futures:
+                future.result()
+    else:
+        for idx, (language_tag, (civilian_word, spy_word)) in enumerate(batch, start=1):
+            _run_single_multilingual_game(
+                players, idx, language_tag, civilian_word, spy_word
+            )
+
+    overall_metrics = metrics_collector.get_overall_metrics()
+    quality_score = metrics_collector.compute_quality_score()
+
+    print("\nOverall metrics:")
+    print(json.dumps(overall_metrics, ensure_ascii=False, indent=2))
+    print("\nQuality score:")
+    print(json.dumps(quality_score, ensure_ascii=False, indent=2))
+
+    return {"metrics": overall_metrics, "quality_score": quality_score}
+
+
+if __name__ == "__main__":
+    run_multilingual_metrics_batch(concurrent=True)
+
+
+__all__ = [
+    "GameMetrics",
+    "metrics_collector",
+    "MULTILINGUAL_VOCABULARY_BATCH",
+    "run_multilingual_metrics_batch",
+]
