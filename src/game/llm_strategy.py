@@ -149,18 +149,16 @@ _INFERENCE_PROMPT_PREFIX = """You are a player in the game "Who is the Spy". You
 
 **Decision & Confidence Rules:**
 - **Self-Role:**
-    - **IF** statements from **two or more** other players are consistent with each other but create a "Strong Conflict" with your word, **THEN you MUST 
-conclude you are the Spy**.
-    - **ELSE**, you should assume you are a **Civilian**.
+    - Treat strong conflicts (two or more players matching each other while clashing with your word) as a **major clue** that you might be the Spy.
+    - If the evidence is mixed, stay uncertain and keep probing; do **not** force a Spy conclusion if the group could still share your concept.
 - **Self-Confidence:**
-    - If you conclude you are the **Spy**, set confidence to **0.9** (very high certainty).
-    - If you conclude you are a **Civilian** and have identified a clear outlier (a suspected Spy), set confidence to **0.8** (high certainty).
-    - If you conclude you are a **Civilian** but the evidence is weak or ambiguous (e.g., everyone is vague), set confidence to **0.6** (moderate 
-      certainty).
+    - If you are convinced you are the **Spy**, set confidence to **0.8** (very certain but still cautious).
+    - If you lean Civilian and have a clear suspect, set confidence to **0.75**.
+    - If the evidence is ambiguous, keep confidence around **0.5–0.65** to reflect doubt.
 - **Suspicions:**
-    - If a player is a clear **outlier** (conflicts with you AND the group), they are the **Spy**. Set confidence to **0.95**.
-    *   If a player's speech is **very vague** but doesn't conflict, they are slightly suspicious. Mark as **Spy** with confidence **0.6**.
-    - If a player's speech **aligns perfectly** with the group consensus (and yours), they are a **Civilian**. Set confidence to **0.8**.
+    - Strong outliers (conflicting with both you and the group) are prime Spy candidates. Mark them as **Spy** with confidence **0.85**.
+    - Very vague speakers earn light suspicion. Mark them as **Spy** around **0.55**.
+    - Players aligned with the consensus should be tagged **Civilian** with confidence **0.75**.
 
 **Final Instruction:**
 Now, use the `PlayerMindset` tool to return the updated state based on your completed analysis. Do not provide any other text outside the tool output.
@@ -184,18 +182,18 @@ Guide:
 Reply now with your single-line speech."""
 
 _SPY_SPEECH_PROMPT_PREFIX = """You are the spy in the party game "Who is the Spy". Your secret word is "{my_word}" and it is your turn to speak.
-Goal: Share one truthful clue that keeps you indistinguishable from civilians while protecting your word.
+Goal: Blend in by giving a plausible clue that could also fit the civilians' word while safely disguising your own.
 Must:
 - Reply in the same language as "{my_word}".
 - Output exactly one line of plain text; no labels, emojis, quotes, or meta reasoning.
-- Tell the truth about your word; do not say the word itself or obvious synonyms.
+- Prioritize overlap with likely civilian clues; you may soften or generalize details to avoid exposing your unique angle.
 - Do not mention roles, probabilities, mechanics, questions, accusations, or player names.
 - Avoid repeating another player's description this round.
 - Stay concise: 18-35 characters for Chinese/Japanese/Korean, otherwise 20-40 words.
 Guide:
-- Follow the <strategy> tag in the <speech_context> tag and mirror the group’s clarity without exposing your unique angle.
-- If you suspect your word differs from the group, focus on universal traits and echo the language others use.
-- Choose 2-3 aspects such as category, purpose, setting, sensory detail, or user.
+- Follow the <strategy> tag in the <speech_context> tag and mirror the group’s clarity while masking differences.
+- If you sense conflict with the group, emphasize broad categories, shared settings, or emotions instead of specifics.
+- Choose 2-3 aspects such as category, purpose, setting, sensory detail, or user that civilians might also mention.
 - Mirror the tone and vocabulary other players use.
 - Avoid brands, numbers, and rare trivia unless essential.
 Reply now with your single-line speech."""
@@ -440,10 +438,10 @@ def llm_generate_speech(
 
 
 def _format_speech_system_prompt(my_word: str, self_belief: SelfBelief) -> str:
-    """Select the civilian or spy speech prompt based on self-belief."""
-    template = (
-        _CIVILIAN_SPEECH_PROMPT_PREFIX
-        if self_belief.role == "civilian" and self_belief.confidence >= 0.5
-        else _SPY_SPEECH_PROMPT_PREFIX
-    )
+    """Select the civilian or spy speech prompt based on calibrated confidence."""
+    is_confident_spy = self_belief.role == "spy" and self_belief.confidence >= 0.7
+    if is_confident_spy:
+        template = _SPY_SPEECH_PROMPT_PREFIX
+    else:
+        template = _CIVILIAN_SPEECH_PROMPT_PREFIX
     return template.format(my_word=my_word)
