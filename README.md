@@ -184,6 +184,11 @@ score = metrics_collector.compute_quality_score()  # deterministic
 
 These outputs are ready to feed into downstream prompt-evaluation or offline analysis pipelines.
 
+### Metrics Progress
+
+- Maintain a running ledger in [`docs/metrics-history.md`](docs/metrics-history.md) so prompt and strategy changes can be tracked against key metrics.
+- After each batch, record the latest `logs/metrics/overall.json` summary there and archive the raw JSON if you need long-term snapshots.
+
 ## 🛠️ Development
 
 ### Project Structure

@@ -23,10 +23,19 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import json
 import re
+import sys
 from pathlib import Path
 from threading import Lock
 
 from .state import PlayerMindset
+
+
+if __name__ == "__main__":
+    # When executed as a script (e.g. `python -m src.game.metrics`), ensure
+    # the canonical package-qualified module name shares the same module
+    # instance so that imports like `from ..metrics import metrics_collector`
+    # reference the identical singleton.
+    sys.modules.setdefault("src.game.metrics", sys.modules[__name__])
 
 
 def _safe_mean(values: Iterable[Optional[float]]) -> Optional[float]:
