@@ -112,7 +112,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
         alive=alive_players(state),
         me=player_id,
         rules=config.get_game_rules(),
-        playerMindset=existing_player_mindset,
+        existing_player_mindset=existing_player_mindset,
     )
 
     # Generate speech using LLM
@@ -188,13 +188,15 @@ def _decide_player_vote(
         if other_player_id in updated_mindset.suspicions:
             suspicion = updated_mindset.suspicions[other_player_id]
             if my_role == suspicion.role:
-                score = suspicion.confidence  # Trust same alignment
+                # Positive score means we trust them (same role alignment)
+                score = suspicion.confidence
             else:
-                score = -suspicion.confidence  # Distrust different alignment
+                # Negative score means we distrust them (different role alignment)
+                score = -suspicion.confidence
         player_scores[other_player_id] = score
 
     if player_scores:
-        # Select the player with the maximum score
+        # Pick the lowest score (most distrust) to target suspected opponents
         voted_target = min(player_scores, key=player_scores.get)
     else:
         # Fallback if no other players to score (e.g., only self is alive)
@@ -242,7 +244,7 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
         alive=alive_players(state),
         me=player_id,
         rules=config.get_game_rules(),
-        playerMindset=existing_player_mindset,
+        existing_player_mindset=existing_player_mindset,
     )
     # Decide the player's vote and infer PlayerMindset using LLM
     voted_target = _decide_player_vote(state, player_id, updated_mindset)
@@ -265,11 +267,9 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     delta_private = _create_player_private_state_delta(
         updated_mindset, cur_player_context, my_word
     )
-    new_votes = {
-        player_id: Vote(target=voted_target, ts=ts, phase_id=state["phase_id"])
-    }
+    new_vote = {player_id: Vote(target=voted_target, ts=ts, phase_id=state["phase_id"])}
 
     return {
-        "current_votes": new_votes,
+        "current_votes": new_vote,
         "player_private_states": {player_id: delta_private},
     }

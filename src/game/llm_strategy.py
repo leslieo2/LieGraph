@@ -79,8 +79,39 @@ def log_self_belief_update(
 
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+
+
 # --- Prompt Builders ---
 # Optimized for Prompt Caching: Static prefixes are defined once.
+
+
+def _determine_clarity(
+    role: str, self_confidence, current_round: int
+) -> tuple[str, str]:
+    """Return role-aware clarity code and description for the current round."""
+    if role == "spy" and self_confidence > 0.5:
+        if current_round <= 2:
+            return (
+                "low",
+                "LOW clarity — stay broad to blend with civilians",
+            )
+        if current_round <= 4:
+            return (
+                "medium",
+                "MEDIUM clarity — add safe overlaps without exposing differences",
+            )
+        return (
+            "medium",
+            "MEDIUM clarity — stay measured while matching the group's detail level",
+        )
+
+    # Civilian defaults
+    if current_round <= 1:
+        return "low", "LOW clarity — broad and neutral foundation"
+    if current_round == 2:
+        return "medium", "MEDIUM clarity — start introducing gentle differentiators"
+    return "high", "HIGH clarity — press with confident, specific traits"
+
 
 _INFERENCE_PROMPT_PREFIX = """You are a player in the game "Who is the Spy". Your goal is to analyze the game state and update your beliefs.
 - Pay close attention to whether other players' descriptions match your understanding of your word.
@@ -135,39 +166,39 @@ conclude you are the Spy**.
 Now, use the `PlayerMindset` tool to return the updated state based on your completed analysis. Do not provide any other text outside the tool output.
 """
 
-_SPEECH_PROMPT_PREFIX = """You are a player in the party game "Who is the Spy". It's your turn to speak.
+_CIVILIAN_SPEECH_PROMPT_PREFIX = """You are a civilian player in the party game "Who is the Spy". Your secret word is "{my_word}" and it is your turn to speak.
+Goal: Share one truthful clue that helps fellow civilians test the group without giving away the exact word.
+Must:
+- Reply in the same language as "{my_word}".
+- Output exactly one line of plain text; no labels, emojis, quotes, or meta reasoning.
+- Tell the truth about your word; do not say the word itself or obvious synonyms.
+- Do not mention roles, probabilities, mechanics, questions, accusations, or player names.
+- Avoid repeating another player's description this round.
+- Stay concise: 18-35 characters for Chinese/Japanese/Korean, otherwise 20-40 words.
+Guide:
+- Follow the <strategy> tag in the <speech_context> tag to match the desired clarity for this turn.
+- Use the confidence value in the <self> tag to decide how bold to be: higher confidence supports sharper differentiators, lower confidence favors safer overlaps.
+- Choose 2-3 aspects such as category, purpose, setting, sensory detail, or user.
+- Mirror the tone and vocabulary other players use.
+- Skip brands, numbers, and rare trivia unless essential.
+Reply now with your single-line speech."""
 
-# Language & Output
-- IMPORTANT: Reply **in the same language as your word**: "{my_word}".
-- Output **one line only** containing **just your speech**. No role, no reasoning, no labels, no quotes, no emojis.
-
-# Hard Rules
-1) **Do NOT lie.** Your description must be truthful and accurate for your word. For example, if your word is "牛奶" (milk), you cannot say "它是黄色的" (it is yellow), because that is a lie. The fun of the game comes from giving truthful, but skillful, descriptions.
-2) **Do NOT repeat descriptions** that other players have already said in this round. Your description must be new.
-3) Do NOT say the word itself or obvious synonyms that trivially reveal it.
-4) Do NOT mention roles, probabilities, or game mechanics.
-5) Do NOT ask questions, accuse, or name players in this speech turn (this is the description phase).
-6) Stay concise.
-   - If the language is Chinese/Japanese/Korean: **18–35 characters**.
-   - Otherwise: **20–40 words**.
-
-# Round Strategy Explanation
-  - LOW clarity: Be broad, but include **one subtle "test" detail**. This detail should be true for your word but might be slightly awkward for a very similar word. The goal is to gently probe, not expose.
-  - MEDIUM clarity: Add **1 clear differentiator**. At this stage, your description should start to actively exclude closely related words.
-  - HIGH clarity: Add **1-2 strong differentiators**. Your description should make it very difficult for a spy with a related word to agree.
-
-# Strategic Guidance
-- Based on your self-belief confidence, adjust your strategy:
-  - If confidence > 0.8 (highly certain you are civilian): Your job is now to **actively test** others. Your description can be a little more specific to force the spy to reveal a flaw, because they cannot lie. For example, for "海洋" (ocean), you could say "它占了地球表面的绝大部分", a fact a spy with the word "湖泊" (lake) cannot truthfully claim.
-  - If confidence is between 0.5 and 0.8 (leaning civilian): Provide balanced descriptions with a "gentle differentiator".
-  - If confidence < 0.5 (suspecting you are the spy): Your goal is to blend in **without lying**. Find truthful descriptions for your word that are as generic as possible. Listen to what others say and try to find the **overlapping features** between their descriptions and your own word. For example, if you think their word is "牛奶" (milk) and yours is "豆浆" (soy milk), you could truthfully say "it is a white liquid" or "it is often drunk for breakfast". Avoid details that are unique to your word and contradict the emerging consensus.
-- Choose **2–3** elements: **category/purpose/scene/time/tactile feel/taste or smell/shape or color/intended user**.
-- Provide **at least one** "gentle differentiator" that helps distinguish from likely near-synonyms without **pointing directly to the target**.
-- Avoid brands, proper nouns, numbers, or rare specifics.
-- Reuse **neutral** words and sentence patterns others have used; **mirror** the group's style to reduce mismatch.
----
-Your reply must be exactly one line of plain text (no lists, no labels) in the language of "{my_word}".
-"""
+_SPY_SPEECH_PROMPT_PREFIX = """You are the spy in the party game "Who is the Spy". Your secret word is "{my_word}" and it is your turn to speak.
+Goal: Share one truthful clue that keeps you indistinguishable from civilians while protecting your word.
+Must:
+- Reply in the same language as "{my_word}".
+- Output exactly one line of plain text; no labels, emojis, quotes, or meta reasoning.
+- Tell the truth about your word; do not say the word itself or obvious synonyms.
+- Do not mention roles, probabilities, mechanics, questions, accusations, or player names.
+- Avoid repeating another player's description this round.
+- Stay concise: 18-35 characters for Chinese/Japanese/Korean, otherwise 20-40 words.
+Guide:
+- Follow the <strategy> tag in the <speech_context> tag and mirror the group’s clarity without exposing your unique angle.
+- If you suspect your word differs from the group, focus on universal traits and echo the language others use.
+- Choose 2-3 aspects such as category, purpose, setting, sensory detail, or user.
+- Mirror the tone and vocabulary other players use.
+- Avoid brands, numbers, and rare trivia unless essential.
+Reply now with your single-line speech."""
 
 
 def _trim_text_for_prompt(text: str, limit: int = 180) -> str:
@@ -270,44 +301,26 @@ def _format_speeches_xml(
 
 
 def _build_inference_user_context(
-    my_word: str,
     completed_speeches: Sequence[Speech],
     players: List[str],
     alive: List[str],
     me: str,
-    playerMindset: PlayerMindset,
+    existing_player_mindset: PlayerMindset,
 ) -> str:
     players_xml = _format_players_xml(players, alive, me)
-    mindset_xml = _format_mindset_xml(playerMindset)
+    mindset_xml = _format_mindset_xml(existing_player_mindset)
     speeches_xml = _format_speeches_xml(completed_speeches)
 
     return (
         "<inference_context>"
-        f"<assigned_word>{escape(my_word)}</assigned_word>"
         f"{players_xml}{mindset_xml}{speeches_xml}"
         "<response_guidance>Use the PlayerMindset tool only; do not provide prose or explanations.</response_guidance>"
         "</inference_context>"
     )
 
 
-def _build_inference_dynamic_suffix(
-    my_word: str,
-    completed_speeches: Sequence[Speech],
-    players: List[str],
-    alive: List[str],
-    me: str,
-    playerMindset: PlayerMindset,
-) -> str:
-    """Backward-compatible wrapper returning the structured inference context."""
-    return _build_inference_user_context(
-        my_word, completed_speeches, players, alive, me, playerMindset
-    )
-
-
 def _build_speech_user_context(
-    my_word: str,
     self_belief: SelfBelief,
-    suspicions: Dict[str, Suspicion],
     completed_speeches: Sequence[Speech],
     me: str,
     alive: List[str],
@@ -317,62 +330,23 @@ def _build_speech_user_context(
     self_role = self_belief.role
     self_confidence = self_belief.confidence
 
-    if current_round <= 1:
-        clarity_code = "low"
-        clarity_desc = "LOW clarity — broad and neutral"
-    elif current_round == 2:
-        clarity_code = "medium"
-        clarity_desc = "MEDIUM clarity — balanced specificity"
-    else:
-        clarity_code = "high"
-        clarity_desc = "HIGH clarity — concrete but still safe"
+    clarity_code, clarity_desc = _determine_clarity(
+        self_role, self_confidence, current_round
+    )
 
     alive_tags = "".join(f'<player id="{escape(pid)}" />' for pid in alive)
     alive_block = f"<alive_players>{alive_tags or '<none />'}</alive_players>"
-
-    if suspicions:
-        sorted_suspicions = sorted(
-            suspicions.items(), key=lambda item: item[1].confidence, reverse=True
-        )
-        top_id, top_suspicion = sorted_suspicions[0]
-        susp_reason = _trim_text_for_prompt(top_suspicion.reason, limit=140)
-        top_suspicion_block = (
-            f'<top_suspicion target="{escape(top_id)}" '
-            f'role="{escape(top_suspicion.role)}" '
-            f'confidence="{top_suspicion.confidence:.2f}">'
-            f"{escape(susp_reason)}"
-            "</top_suspicion>"
-        )
-    else:
-        top_suspicion_block = "<top_suspicion />"
 
     speech_logs_block = _format_speeches_xml(completed_speeches)
 
     return (
         "<speech_context>"
-        f"<assigned_word>{escape(my_word)}</assigned_word>"
         f'<self role="{escape(self_role)}" confidence="{self_confidence:.2f}" />'
-        f"{top_suspicion_block}"
         f'<strategy round="{current_round}" clarity="{clarity_code}">{escape(clarity_desc)}</strategy>'
         f'<speaker id="{escape(me)}" />'
         f'{alive_block}<current_round index="{current_round}" />{speech_logs_block}'
         "<response_guidance>Return exactly one line of speech; avoid emojis, labels, or extra commentary.</response_guidance>"
         "</speech_context>"
-    )
-
-
-def _build_speech_dynamic_suffix(
-    my_word: str,
-    self_belief: SelfBelief,
-    suspicions: Dict[str, Suspicion],
-    completed_speeches: Sequence[Speech],
-    me: str,
-    alive: List[str],
-    current_round: int,
-) -> str:
-    """Backward-compatible wrapper returning the structured speech context."""
-    return _build_speech_user_context(
-        my_word, self_belief, suspicions, completed_speeches, me, alive, current_round
     )
 
 
@@ -406,10 +380,9 @@ def llm_update_player_mindset(
     alive: List[str],
     me: str,
     rules: Dict[str, Any],
-    playerMindset: PlayerMindset,
+    existing_player_mindset: PlayerMindset,
 ) -> PlayerMindset:
-    # Store old self_belief for logging
-    old_self_belief = playerMindset.self_belief
+    existing_self_belief = existing_player_mindset.self_belief
 
     # 1. Format the system prompt (instructions)
     system_prompt = _INFERENCE_PROMPT_PREFIX.format(
@@ -418,7 +391,7 @@ def llm_update_player_mindset(
 
     # 2. Build the user context (structured, dynamic state)
     user_context = _build_inference_user_context(
-        my_word, completed_speeches, players, alive, me, playerMindset
+        completed_speeches, players, alive, me, existing_player_mindset
     )
 
     extractor = create_extractor(
@@ -430,15 +403,14 @@ def llm_update_player_mindset(
 
     if result["responses"]:
         new_mindset = result["responses"][0]
-        log_self_belief_update(me, old_self_belief, new_mindset.self_belief)
+        log_self_belief_update(me, existing_self_belief, new_mindset.self_belief)
         return new_mindset
 
-    # Fallback: return default mindset
-    default_mindset = PlayerMindset(
-        self_belief=SelfBelief(role="civilian", confidence=0.5), suspicions={}
+    # Fallback: LLM failed, preserve previous mindset
+    log_self_belief_update(
+        me, existing_self_belief, existing_player_mindset.self_belief
     )
-    log_self_belief_update(me, old_self_belief, default_mindset.self_belief)
-    return default_mindset
+    return existing_player_mindset
 
 
 def llm_generate_speech(
@@ -451,9 +423,9 @@ def llm_generate_speech(
     alive: List[str],
     current_round: int,
 ) -> str:
-    system_prompt = _SPEECH_PROMPT_PREFIX.format(my_word=my_word)
+    system_prompt = _format_speech_system_prompt(my_word, self_belief)
     user_context = _build_speech_user_context(
-        my_word, self_belief, suspicions, completed_speeches, me, alive, current_round
+        self_belief, completed_speeches, me, alive, current_round
     )
 
     messages = [
@@ -465,3 +437,13 @@ def llm_generate_speech(
 
     raw_text = response.content if hasattr(response, "content") else response
     return _sanitize_speech_output(raw_text)
+
+
+def _format_speech_system_prompt(my_word: str, self_belief: SelfBelief) -> str:
+    """Select the civilian or spy speech prompt based on self-belief."""
+    template = (
+        _CIVILIAN_SPEECH_PROMPT_PREFIX
+        if self_belief.role == "civilian" and self_belief.confidence >= 0.5
+        else _SPY_SPEECH_PROMPT_PREFIX
+    )
+    return template.format(my_word=my_word)

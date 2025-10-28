@@ -120,10 +120,9 @@ def test_player_vote(mock_infer, player_id, base_player_state: GameState):
 
     # Assert: Verify the output
     assert "current_votes" in update
-    # With the voting logic: civilian player suspects c as spy -> negative score
-    # Players b and d have no suspicions -> score 0.0
-    # Maximum score is 0.0, so it picks the first player alphabetically: "b"
-    assert update["current_votes"][player_id].target == "b"
+    # With the current voting logic: civilian player suspects c as spy -> lowest score
+    # Players b and d have neutral score (0.0), so a selects the most suspicious player "c"
+    assert update["current_votes"][player_id].target == "c"
 
     assert "player_private_states" in update
     private_update = update["player_private_states"][player_id]
