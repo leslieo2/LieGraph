@@ -22,8 +22,12 @@ Architecture:
 
 import json
 import os
+import re
 from datetime import datetime
+from html import escape
 from typing import List, Dict, Any, Sequence
+
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from trustcall import create_extractor
 
@@ -102,7 +106,7 @@ def merge_probs(old_probs: Dict[str, Any], new_probs: Dict[str, Any]) -> Dict[st
 # --- Prompt Builders ---
 # Optimized for Prompt Caching: Static prefixes are defined once.
 
-_INFERENCE_PROMPT_PREFIX = """You are a player in the game "Who is the Spy". Your goal is to win.
+_INFERENCE_SYSTEM_PROMPT = """You are a player in the game "Who is the Spy". Your goal is to win.
 - If you are a Civilian: you win by identifying and voting out the Spy.
 - If you are the Spy: you win when the number of alive spies is equal to or greater than the number of alive civilians.
 - Pay close attention to whether other players' descriptions match your understanding of your word.
@@ -156,9 +160,13 @@ Carefully review ALL previous speeches and update your PlayerMindset based on yo
 - self_belief.confidence > 0.5: leaning toward the specified role.
 - self_belief.confidence < 0.5: leaning toward the opposite role. Use values ≤ 0.4 to signal serious doubt when staying in the same role.
 ---
+When you respond, use the PlayerMindset tool to return the updated state. Do not provide free-form prose outside of the tool output.
 """
 
-_SPEECH_PROMPT_PREFIX = """You are a player in the party game "Who is the Spy". It's your turn to speak.
+# Backward compatibility for tests/imports expecting legacy constant name.
+_INFERENCE_PROMPT_PREFIX = _INFERENCE_SYSTEM_PROMPT
+
+_SPEECH_SYSTEM_PROMPT = """You are a player in the party game "Who is the Spy". It's your turn to speak.
 
 # Language & Output
 - IMPORTANT: Reply **in the same language as your word**: "{my_word}".
@@ -189,7 +197,126 @@ _SPEECH_PROMPT_PREFIX = """You are a player in the party game "Who is the Spy". 
 - Avoid brands, proper nouns, numbers, or rare specifics.
 - Reuse **neutral** words and sentence patterns others have used; **mirror** the group's style to reduce mismatch.
 ---
+Your reply must be exactly one line of plain text (no lists, no labels) in the language of "{my_word}".
 """
+
+# Retain legacy name so existing callers/tests keep working.
+_SPEECH_PROMPT_PREFIX = _SPEECH_SYSTEM_PROMPT
+
+
+def _trim_text_for_prompt(text: str, limit: int = 180) -> str:
+    """Normalize whitespace and trim long passages for prompt friendliness."""
+    cleaned = " ".join(str(text).split())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "…"
+
+
+def _format_players_xml(players: Sequence[str], alive: Sequence[str], me: str) -> str:
+    alive_tags = "".join(
+        f'<player id="{escape(pid)}" status="alive" />' for pid in alive
+    )
+    roster_tags = "".join(f'<player id="{escape(pid)}" />' for pid in players)
+    return (
+        f'<players me="{escape(me)}">'
+        f"<alive>{alive_tags or '<none />'}</alive>"
+        f"<all>{roster_tags}</all>"
+        "</players>"
+    )
+
+
+def _format_mindset_xml(playerMindset: PlayerMindset) -> str:
+    self_belief = playerMindset.self_belief
+    suspicions = playerMindset.suspicions or {}
+    suspicions_tags = []
+    for pid, suspicion in suspicions.items():
+        trimmed_reason = _trim_text_for_prompt(suspicion.reason, limit=160)
+        suspicions_tags.append(
+            (
+                f'<suspicion target="{escape(pid)}" '
+                f'role="{escape(suspicion.role)}" '
+                f'confidence="{suspicion.confidence:.2f}">'
+                f"{escape(trimmed_reason)}"
+                "</suspicion>"
+            )
+        )
+
+    suspicions_block = "".join(suspicions_tags) or "<none />"
+    return (
+        f'<mindset self_role="{escape(self_belief.role)}" '
+        f'self_confidence="{self_belief.confidence:.2f}">'
+        f"<suspicions>{suspicions_block}</suspicions>"
+        "</mindset>"
+    )
+
+
+def _format_speeches_xml(
+    completed_speeches: Sequence[Speech],
+    rounds_to_keep: int = 2,
+    max_entries: int = 12,
+) -> str:
+    if not completed_speeches:
+        return "<speech_logs />"
+
+    ordered = sorted(
+        completed_speeches,
+        key=lambda s: (s.get("round", 0), s.get("seq", 0)),
+    )
+    round_ids = sorted({speech.get("round", 0) for speech in ordered})
+    selected_rounds = set(round_ids[-rounds_to_keep:])
+    filtered = [
+        speech for speech in ordered if speech.get("round", 0) in selected_rounds
+    ]
+
+    if len(filtered) > max_entries:
+        filtered = filtered[-max_entries:]
+
+    segments = ["<speech_logs>"]
+    current_round = None
+
+    for speech in filtered:
+        round_index = speech.get("round", 0)
+        if round_index != current_round:
+            if current_round is not None:
+                segments.append("</round>")
+            segments.append(f'<round index="{round_index}">')
+            current_round = round_index
+
+        segments.append(
+            (
+                f'<speech seq="{speech.get("seq", 0)}" '
+                f'player="{escape(speech.get("player_id", "unknown"))}">'
+                f"{escape(_trim_text_for_prompt(speech.get("content", ""), limit=140))}"
+                "</speech>"
+            )
+        )
+
+    if current_round is not None:
+        segments.append("</round>")
+
+    segments.append("</speech_logs>")
+    return "".join(segments)
+
+
+def _build_inference_user_context(
+    my_word: str,
+    completed_speeches: Sequence[Speech],
+    players: List[str],
+    alive: List[str],
+    me: str,
+    playerMindset: PlayerMindset,
+) -> str:
+    players_xml = _format_players_xml(players, alive, me)
+    mindset_xml = _format_mindset_xml(playerMindset)
+    speeches_xml = _format_speeches_xml(completed_speeches)
+
+    return (
+        "<inference_context>"
+        f"<assigned_word>{escape(my_word)}</assigned_word>"
+        f"{players_xml}{mindset_xml}{speeches_xml}"
+        "<response_guidance>Use the PlayerMindset tool only; do not provide prose or explanations.</response_guidance>"
+        "</inference_context>"
+    )
 
 
 def _build_inference_dynamic_suffix(
@@ -200,23 +327,97 @@ def _build_inference_dynamic_suffix(
     me: str,
     playerMindset: PlayerMindset,
 ) -> str:
-    """Builds the dynamic part of the inference prompt."""
-    player_mindset_dict = playerMindset.model_dump()
-    return f"""**Current Game State:**
-- Your Player ID: {me}
-- Your Word: "{my_word}"
-- All Players: {players}
-- Alive Players: {alive}
-- Your Previous PlayerMindset (reference only, you may override anything): {json.dumps(player_mindset_dict, indent=2, ensure_ascii=False)}
-- Completed Speeches: {json.dumps(completed_speeches, indent=2, ensure_ascii=False)}
+    """Backward-compatible wrapper returning the structured inference context."""
+    return _build_inference_user_context(
+        my_word, completed_speeches, players, alive, me, playerMindset
+    )
 
-**Key Questions to Consider:**
-- Do other players' descriptions match what you expect for the word "{my_word}"?
-- Are there players whose descriptions seem suspiciously different?
-- Based on the evidence, should you be more or less confident about your own role?
 
-Now, carefully analyze the speeches and form your updated PlayerMindset and suspicions.
-"""
+def _format_round_speeches_xml(
+    completed_speeches: Sequence[Speech],
+    current_round: int,
+    max_entries: int = 8,
+) -> str:
+    round_speeches = [
+        speech for speech in completed_speeches if speech.get("round") == current_round
+    ]
+    if not round_speeches:
+        return f'<speech_round index="{current_round}" />'
+
+    round_speeches.sort(key=lambda s: s.get("seq", 0))
+    if len(round_speeches) > max_entries:
+        round_speeches = round_speeches[:max_entries]
+
+    segments = [f'<speech_round index="{current_round}">']
+    for speech in round_speeches:
+        segments.append(
+            (
+                f'<speech seq="{speech.get("seq", 0)}" '
+                f'player="{escape(speech.get("player_id", "unknown"))}">'
+                f"{escape(_trim_text_for_prompt(speech.get("content", ""), limit=140))}"
+                "</speech>"
+            )
+        )
+
+    segments.append("</speech_round>")
+    return "".join(segments)
+
+
+def _build_speech_user_context(
+    my_word: str,
+    self_belief: SelfBelief,
+    suspicions: Dict[str, Suspicion],
+    completed_speeches: Sequence[Speech],
+    me: str,
+    alive: List[str],
+    current_round: int,
+) -> str:
+    """Builds the dynamic part of the speech prompt as structured XML."""
+    self_role = self_belief.role
+    self_confidence = self_belief.confidence
+
+    if current_round <= 1:
+        clarity_code = "low"
+        clarity_desc = "LOW clarity — broad and neutral"
+    elif current_round == 2:
+        clarity_code = "medium"
+        clarity_desc = "MEDIUM clarity — balanced specificity"
+    else:
+        clarity_code = "high"
+        clarity_desc = "HIGH clarity — concrete but still safe"
+
+    alive_tags = "".join(f'<player id="{escape(pid)}" />' for pid in alive)
+    alive_block = f"<alive_players>{alive_tags or '<none />'}</alive_players>"
+
+    if suspicions:
+        sorted_suspicions = sorted(
+            suspicions.items(), key=lambda item: item[1].confidence, reverse=True
+        )
+        top_id, top_suspicion = sorted_suspicions[0]
+        susp_reason = _trim_text_for_prompt(top_suspicion.reason, limit=140)
+        top_suspicion_block = (
+            f'<top_suspicion target="{escape(top_id)}" '
+            f'role="{escape(top_suspicion.role)}" '
+            f'confidence="{top_suspicion.confidence:.2f}">'
+            f"{escape(susp_reason)}"
+            "</top_suspicion>"
+        )
+    else:
+        top_suspicion_block = "<top_suspicion />"
+
+    round_speeches_block = _format_round_speeches_xml(completed_speeches, current_round)
+
+    return (
+        "<speech_context>"
+        f"<assigned_word>{escape(my_word)}</assigned_word>"
+        f'<self role="{escape(self_role)}" confidence="{self_confidence:.2f}" />'
+        f"{top_suspicion_block}"
+        f'<strategy round="{current_round}" clarity="{clarity_code}">{escape(clarity_desc)}</strategy>'
+        f'<speaker id="{escape(me)}" />'
+        f"{alive_block}{round_speeches_block}"
+        "<response_guidance>Return exactly one line of speech; avoid emojis, labels, or extra commentary.</response_guidance>"
+        "</speech_context>"
+    )
 
 
 def _build_speech_dynamic_suffix(
@@ -228,45 +429,29 @@ def _build_speech_dynamic_suffix(
     alive: List[str],
     current_round: int,
 ) -> str:
-    """Builds the dynamic part of the speech prompt."""
-    self_role = self_belief.role
-    self_confidence = self_belief.confidence
+    """Backward-compatible wrapper returning the structured speech context."""
+    return _build_speech_user_context(
+        my_word, self_belief, suspicions, completed_speeches, me, alive, current_round
+    )
 
-    if suspicions:
-        sorted_suspicions = sorted(
-            suspicions.items(),
-            key=lambda item: item[1].confidence,
-            reverse=True,
-        )
-        top_suspicion = sorted_suspicions[0]
-        suspicions_summary = f"You are most suspicious of {top_suspicion[0]} ({top_suspicion[1].confidence:.0%} confidence)."
-    else:
-        suspicions_summary = "You have no strong suspicions yet."
 
-    if current_round <= 1:
-        clarity = "LOW (very safe, broad and neutral)"
-    elif current_round == 2:
-        clarity = "MEDIUM (balanced specificity)"
-    else:
-        clarity = "HIGH (more concrete but still safe)"
+_EMOJI_REGEX = re.compile("[\u2600-\u26ff\u2700-\u27bf\U0001f300-\U0001faff]")
 
-    return f"""**Your Current Assessment:**
-- Self-belief: You are {self_role} with {self_confidence:.0%} confidence
-  (0.5 = uncertain, >0.5 = leaning toward {self_role}, <0.5 = leaning toward the opposite role)
-- Your most suspicious player: {suspicions_summary}
 
-**This Round's Strategy:**
-- Round: {current_round} → Clarity target: **{clarity}**.
+def _sanitize_speech_output(text: Any) -> str:
+    """Flatten whitespace, drop emojis, and enforce a single-line speech."""
+    if text is None:
+        return ""
 
-**Game State:**
-- Your Player ID: {me}
-- Your Word: "{my_word}"
-- Round: {current_round}
-- Alive Players: {alive}
-- Speeches this round: {json.dumps([s for s in completed_speeches if s.get('round') == current_round], indent=2, ensure_ascii=False)}
-
-Now, provide your speech.
-"""
+    raw = str(text)
+    lines = [
+        line.strip() for line in raw.replace("\r", "").splitlines() if line.strip()
+    ]
+    candidate = lines[-1] if lines else raw.strip()
+    candidate = candidate.replace("\n", " ")
+    candidate = _EMOJI_REGEX.sub("", candidate)
+    candidate = " ".join(candidate.split())
+    return candidate
 
 
 # --- LLM Interaction Functions ---
@@ -285,27 +470,22 @@ def llm_update_player_mindset(
     # Store old self_belief for logging
     old_self_belief = playerMindset.self_belief
 
-    # 1. Format the static prefix (unchanging instructions)
-    static_prompt = _INFERENCE_PROMPT_PREFIX.format(
+    # 1. Format the system prompt (instructions)
+    system_prompt = _INFERENCE_SYSTEM_PROMPT.format(
         my_word=my_word, player_count=len(players), spy_count=rules.get("spy_count", 1)
     )
 
-    # 2. Build the dynamic suffix (changing game state)
-    dynamic_prompt = _build_inference_dynamic_suffix(
+    # 2. Build the user context (structured, dynamic state)
+    user_context = _build_inference_user_context(
         my_word, completed_speeches, players, alive, me, playerMindset
     )
-
-    # 3. Combine for the final prompt
-    prompt = static_prompt + dynamic_prompt
-
-    # Future optimization: Here you would use a caching mechanism.
-    # e.g., cached_content = client.cache_content(static_prompt)
-    #        response = model.generate_content([cached_content, dynamic_prompt])
 
     extractor = create_extractor(
         llm_client, tools=[PlayerMindset], tool_choice="PlayerMindset"
     )
-    result = extractor.invoke({"messages": [("user", prompt)]})
+    result = extractor.invoke(
+        {"messages": [("system", system_prompt), ("user", user_context)]}
+    )
 
     if result["responses"]:
         new_mindset = result["responses"][0]
@@ -330,20 +510,17 @@ def llm_generate_speech(
     alive: List[str],
     current_round: int,
 ) -> str:
-    # 1. Format the static prefix
-    static_prompt = _SPEECH_PROMPT_PREFIX.format(my_word=my_word)
-
-    # 2. Build the dynamic suffix
-    dynamic_prompt = _build_speech_dynamic_suffix(
+    system_prompt = _SPEECH_SYSTEM_PROMPT.format(my_word=my_word)
+    user_context = _build_speech_user_context(
         my_word, self_belief, suspicions, completed_speeches, me, alive, current_round
     )
 
-    # 3. Combine for the final prompt
-    prompt = static_prompt + dynamic_prompt
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_context),
+    ]
 
-    response = llm_client.invoke(prompt)
+    response = llm_client.invoke(messages)
 
-    # Add a simple post-processing to enhance robustness
-    if hasattr(response, "content"):
-        return response.content.strip().split("\n")[-1]
-    return str(response).strip().split("\n")[-1]
+    raw_text = response.content if hasattr(response, "content") else response
+    return _sanitize_speech_output(raw_text)

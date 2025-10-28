@@ -86,9 +86,10 @@ def test_build_inference_prompt_en():
     test_state = mock_state_inference_en.copy()
     prompt = build_inference_prompt_for_test(**test_state)
     assert "Who is the Spy" in prompt
-    assert 'Your Word: "apple"' in prompt
-    assert '"player_id": "b"' in prompt
-    assert '"content": "It\'s a fruit."' in prompt
+    assert "<inference_context>" in prompt
+    assert "<assigned_word>apple</assigned_word>" in prompt
+    assert '<players me="a">' in prompt
+    assert '<speech seq="0" player="b">It&#x27;s a fruit.</speech>' in prompt
 
 
 def test_build_inference_prompt_zh():
@@ -97,9 +98,8 @@ def test_build_inference_prompt_zh():
     prompt = build_inference_prompt_for_test(**test_state)
     # assert "谁是卧底" in prompt  # TODO: Add translation check
     assert "Who is the Spy" in prompt
-    assert 'Your Word: "apple"' in prompt
-    assert '"player_id": "b"' in prompt
-    assert '"content": "It\'s a type of fruit."' in prompt
+    assert "<assigned_word>apple</assigned_word>" in prompt
+    assert '<speech seq="0" player="b">It&#x27;s a type of fruit.</speech>' in prompt
 
 
 def build_speech_prompt_for_test(
@@ -123,8 +123,12 @@ def test_build_speech_prompt_en():
     test_state = mock_state_speech_vote_en.copy()
     prompt = build_speech_prompt_for_test(**test_state)
     assert "It's your turn to speak" in prompt
-    assert 'Your Word: "apple"' in prompt
-    assert "most suspicious of b" in prompt
+    assert "<speech_context>" in prompt
+    assert "<assigned_word>apple</assigned_word>" in prompt
+    assert (
+        '<top_suspicion target="b" role="spy" confidence="0.60">Vague speech.</top_suspicion>'
+        in prompt
+    )
 
 
 def test_build_speech_prompt_zh():
@@ -133,8 +137,12 @@ def test_build_speech_prompt_zh():
     prompt = build_speech_prompt_for_test(**test_state)
     # assert "轮到你发言了" in prompt  # TODO: Add translation check
     assert "It's your turn to speak" in prompt
-    assert 'Your Word: "apple"' in prompt
-    assert "most suspicious of b" in prompt
+    assert "<speech_context>" in prompt
+    assert "<assigned_word>apple</assigned_word>" in prompt
+    assert (
+        '<top_suspicion target="b" role="spy" confidence="0.60">Speech is very vague.</top_suspicion>'
+        in prompt
+    )
 
 
 @patch("src.game.llm_strategy.create_extractor")
