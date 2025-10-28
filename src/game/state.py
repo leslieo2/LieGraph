@@ -19,7 +19,7 @@ Key Concepts:
 import time
 import uuid
 from operator import add
-from typing import List, Literal, TypedDict, Annotated, Optional, Dict
+from typing import List, Literal, TypedDict, Annotated, Optional, Dict, Any
 
 from pydantic import BaseModel, Field
 
@@ -415,3 +415,24 @@ def get_valid_votes_for_phase(votes: Dict[str, Vote], phase_id: str) -> Dict[str
             valid_votes[voter_id] = vote
 
     return valid_votes
+
+
+def get_player_context(state: GameState, player_id: str) -> Dict[str, Any]:
+    """Build a player-specific view of the game state for LLM interactions."""
+    private_context = state.get("player_private_states", {}).get(player_id, {})
+    public_player_context = state.copy()
+    public_player_context.pop("player_private_states", None)
+    public_player_context.pop("host_private_state", None)
+
+    return {"public": public_player_context, "private": private_context}
+
+
+def merge_probs(old_probs: Dict[str, Any], new_probs: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge probability-like dictionaries, preserving model outputs."""
+    merged: Dict[str, Any] = dict(old_probs)
+    for pid, payload in new_probs.items():
+        if hasattr(payload, "model_dump"):
+            merged[pid] = payload.model_dump()
+        else:
+            merged[pid] = dict(payload)
+    return merged

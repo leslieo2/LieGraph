@@ -27,8 +27,6 @@ from ..config import get_config
 from ..llm_strategy import (
     llm_update_player_mindset,
     llm_generate_speech,
-    get_player_context,
-    merge_probs,
     llm_client,  # Use the real LLM client
 )
 from ..metrics import metrics_collector
@@ -40,6 +38,8 @@ from ..state import (
     Speech,
     PlayerPrivateState,
     PlayerMindset,
+    get_player_context,
+    merge_probs,
 )
 
 _llm_client = llm_client

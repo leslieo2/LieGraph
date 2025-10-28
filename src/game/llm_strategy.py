@@ -79,30 +79,6 @@ def log_self_belief_update(
 
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
-
-
-def get_player_context(state: GameState, player_id: str) -> Dict[str, Any]:
-    private_context = state.get("player_private_states", {}).get(player_id, {})
-    public_player_context = state.copy()
-    public_player_context.pop("player_private_states", None)
-    public_player_context.pop("host_private_state", None)
-
-    return {"public": public_player_context, "private": private_context}
-
-
-def merge_probs(old_probs: Dict[str, Any], new_probs: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Merge two probability dictionaries with incremental updates.
-    """
-    out = dict(old_probs)
-    for pid, payload in new_probs.items():
-        if hasattr(payload, "model_dump"):
-            out[pid] = payload.model_dump()
-        else:
-            out[pid] = dict(payload)
-    return out
-
-
 # --- Prompt Builders ---
 # Optimized for Prompt Caching: Static prefixes are defined once.
 
