@@ -106,9 +106,7 @@ def merge_probs(old_probs: Dict[str, Any], new_probs: Dict[str, Any]) -> Dict[st
 # --- Prompt Builders ---
 # Optimized for Prompt Caching: Static prefixes are defined once.
 
-_INFERENCE_SYSTEM_PROMPT = """You are a player in the game "Who is the Spy". Your goal is to win.
-- If you are a Civilian: you win by identifying and voting out the Spy.
-- If you are the Spy: you win when the number of alive spies is equal to or greater than the number of alive civilians.
+_INFERENCE_PROMPT_PREFIX = """You are a player in the game "Who is the Spy". Your goal is to analyze the game state and update your beliefs.
 - Pay close attention to whether other players' descriptions match your understanding of your word.
 - If descriptions seem inconsistent with your word, you might be the Spy.
 - IMPORTANT: You MUST respond in the same language as the user's word, which is: "{my_word}".
@@ -116,57 +114,52 @@ _INFERENCE_SYSTEM_PROMPT = """You are a player in the game "Who is the Spy". You
 **Game Rules:**
 - Players: {player_count}, Spies: {spy_count}
 - Civilians get one word, the Spy gets a related one.
-- Describe your word each round, then vote. The player with most votes is eliminated.
+- Your word is: "{my_word}"
+- You MUST respond in the same language as your word.
 
 **Your Task:**
-Carefully review ALL previous speeches and update your PlayerMindset based on your analysis. Your `suspicions` should cover all other alive players. Treat the prior mindset as provisional evidence, not as a constraint.
+1.  First, complete the `<thinking>` block to structure your analysis.
+2.  Then, based on your analysis, use the `PlayerMindset` tool to output your updated beliefs.
 
-**Analysis Instructions:**
-1. **Review Previous Speeches**: Analyze each player's speech content for consistency with your word "{my_word}".
-
-2. **Self-Role Analysis**:
-   - **Step A: Identify Inconsistencies**: Review all speeches and categorize inconsistencies into two levels:
-     - **Strong Conflicts**: Statements that are almost impossible if the speaker had your word "{my_word}". These are rare but decisive.
-     - **Subtle Deviations**: Statements that are technically possible for your word, but feel slightly odd, unexpected, or point to a different "center of gravity". For example, if your word is "警察" (Police), and someone describes it as "一份需要穿制服的工作" (a job that requires a uniform), this is plausible. But if three different people all talk about "服务顾客" (serving customers) or "在店里工作" (working in a store), the collection of these subtle deviations might suggest the word is actually "店员" (clerk).
-
-   - **Step B: Analyze the Evidence**:
-     - **Evidence FOR being the Spy**:
-       - List all **Strong Conflicts**. Explain why.
-       - List all **Subtle Deviations**. Crucially, analyze if these deviations form a *pattern*. Do multiple players seem to be describing a slightly different object?
-     - **Evidence AGAINST being the Spy**: List statements that strongly align with your word and couldn't easily apply to other related words.
-
-   - **Step C: Conclusion**:
-     - If you find even one **Strong Conflict** with a player you believe is a civilian, you MUST conclude you are the spy.
-     - If you find **a recurring pattern of 2 or more Subtle Deviations** that all point to a consistent alternative concept, you should strongly consider that you might be the spy.
-     - Based on the balance of evidence, decide if you are more likely "spy" or "civilian".
-
-3. **Update Self-Belief**: Based on your conclusion:
-   - **Update your role**:
-       - For any strong conflict, set your own role to the opposite of the conflicting player's suspected role (per the rule above). Make this switch even if it contradicts your previous belief.
-       - When conflicts are weak or ambiguous, you may remain in the previous role but justify why the evidence is inconclusive.
-   - **Update confidence**: Adjust your confidence (0.0-1.0).
-       - After enforcing the role flip rule, set the new role with `confidence >= 0.6`.
-       - If you find a pattern of subtle deviations but no strong conflicts, decrease your `confidence` in being a "civilian" to the `0.4-0.6` range to reflect your uncertainty.
-       - If evidence strongly implies you are the spy (multiple conflicts, or no one matches your word), set `confidence <= 0.4` when staying "civilian" or switch to "spy" with `confidence >= 0.6`.
-       - If evidence favors you being civilian, increase confidence gradually but keep it below 0.95 unless you have overwhelming agreement.
-
-4. **Form Suspicions**: For each alive player (except yourself), provide:
-   - role: "civilian" or "spy"
-   - confidence: 0.0-1.0 based on evidence
-   - reason: specific reasoning based on their speech content
-
-**Confidence Scale Guidance:**
-- self_belief.confidence = 0.5: completely uncertain about your role.
-- self_belief.confidence > 0.5: leaning toward the specified role.
-- self_belief.confidence < 0.5: leaning toward the opposite role. Use values ≤ 0.4 to signal serious doubt when staying in the same role.
 ---
-When you respond, use the PlayerMindset tool to return the updated state. Do not provide free-form prose outside of the tool output.
+<thinking>
+**1. Self-Role Analysis:**  
+*   **Evidence FOR being SPY:**  
+    *   **Group Consensus Conflict:** (Do multiple players' statements align with each other but conflict with your word "{my_word}"? List them.)    
+    *   **Other Inconsistencies:** (List any other statements that feel odd or point to a different concept.)
+*   **Evidence FOR being CIVILIAN:**  
+    *   **Outlier Conflict:** (Did one player make a statement that conflicts with both your word AND other players' statements? Identify this outlier.)    
+    *   **Strong Alignment:** (List statements from others that perfectly match your word( "{my_word}".)
+    *   **Conclusion:** (Based on the evidence above, are you more likely the Spy or a Civilian? State your conclusion in one sentence.)  
+**2. Suspicion Analysis (for each other alive player):**  
+*   **Player [ID]:**  
+    *   **Evidence:** (Analyze their speech. Is it consistent with the group? Is it an outlier? Is it vague?)    
+    *   **Conclusion:** (Based on the evidence, are they likely a Spy or a Civilian?)
+    *   **Player [ID]:**  
+    *   ... (Repeat for all other alive players)
+</thinking>
+---
+
+**Decision & Confidence Rules:**
+- **Self-Role:**
+    - **IF** statements from **two or more** other players are consistent with each other but create a "Strong Conflict" with your word, **THEN you MUST 
+conclude you are the Spy**.
+    - **ELSE**, you should assume you are a **Civilian**.
+- **Self-Confidence:**
+    - If you conclude you are the **Spy**, set confidence to **0.9** (very high certainty).
+    - If you conclude you are a **Civilian** and have identified a clear outlier (a suspected Spy), set confidence to **0.8** (high certainty).
+    - If you conclude you are a **Civilian** but the evidence is weak or ambiguous (e.g., everyone is vague), set confidence to **0.6** (moderate 
+      certainty).
+- **Suspicions:**
+    - If a player is a clear **outlier** (conflicts with you AND the group), they are the **Spy**. Set confidence to **0.95**.
+    *   If a player's speech is **very vague** but doesn't conflict, they are slightly suspicious. Mark as **Spy** with confidence **0.6**.
+    - If a player's speech **aligns perfectly** with the group consensus (and yours), they are a **Civilian**. Set confidence to **0.8**.
+
+**Final Instruction:**
+Now, use the `PlayerMindset` tool to return the updated state based on your completed analysis. Do not provide any other text outside the tool output.
 """
 
-# Backward compatibility for tests/imports expecting legacy constant name.
-_INFERENCE_PROMPT_PREFIX = _INFERENCE_SYSTEM_PROMPT
-
-_SPEECH_SYSTEM_PROMPT = """You are a player in the party game "Who is the Spy". It's your turn to speak.
+_SPEECH_PROMPT_PREFIX = """You are a player in the party game "Who is the Spy". It's your turn to speak.
 
 # Language & Output
 - IMPORTANT: Reply **in the same language as your word**: "{my_word}".
@@ -199,9 +192,6 @@ _SPEECH_SYSTEM_PROMPT = """You are a player in the party game "Who is the Spy". 
 ---
 Your reply must be exactly one line of plain text (no lists, no labels) in the language of "{my_word}".
 """
-
-# Retain legacy name so existing callers/tests keep working.
-_SPEECH_PROMPT_PREFIX = _SPEECH_SYSTEM_PROMPT
 
 
 def _trim_text_for_prompt(text: str, limit: int = 180) -> str:
@@ -252,9 +242,10 @@ def _format_mindset_xml(playerMindset: PlayerMindset) -> str:
 
 def _format_speeches_xml(
     completed_speeches: Sequence[Speech],
-    rounds_to_keep: int = 2,
-    max_entries: int = 12,
+    rounds_to_keep: int | None = None,
+    max_entries: int | None = None,
 ) -> str:
+    """Render speeches in chronological order with optional trimming."""
     if not completed_speeches:
         return "<speech_logs />"
 
@@ -262,13 +253,17 @@ def _format_speeches_xml(
         completed_speeches,
         key=lambda s: (s.get("round", 0), s.get("seq", 0)),
     )
-    round_ids = sorted({speech.get("round", 0) for speech in ordered})
-    selected_rounds = set(round_ids[-rounds_to_keep:])
-    filtered = [
-        speech for speech in ordered if speech.get("round", 0) in selected_rounds
-    ]
 
-    if len(filtered) > max_entries:
+    if rounds_to_keep is not None:
+        round_ids = sorted({speech.get("round", 0) for speech in ordered})
+        selected_rounds = set(round_ids[-rounds_to_keep:])
+        filtered = [
+            speech for speech in ordered if speech.get("round", 0) in selected_rounds
+        ]
+    else:
+        filtered = ordered
+
+    if max_entries is not None and len(filtered) > max_entries:
         filtered = filtered[-max_entries:]
 
     segments = ["<speech_logs>"]
@@ -333,36 +328,6 @@ def _build_inference_dynamic_suffix(
     )
 
 
-def _format_round_speeches_xml(
-    completed_speeches: Sequence[Speech],
-    current_round: int,
-    max_entries: int = 8,
-) -> str:
-    round_speeches = [
-        speech for speech in completed_speeches if speech.get("round") == current_round
-    ]
-    if not round_speeches:
-        return f'<speech_round index="{current_round}" />'
-
-    round_speeches.sort(key=lambda s: s.get("seq", 0))
-    if len(round_speeches) > max_entries:
-        round_speeches = round_speeches[:max_entries]
-
-    segments = [f'<speech_round index="{current_round}">']
-    for speech in round_speeches:
-        segments.append(
-            (
-                f'<speech seq="{speech.get("seq", 0)}" '
-                f'player="{escape(speech.get("player_id", "unknown"))}">'
-                f"{escape(_trim_text_for_prompt(speech.get("content", ""), limit=140))}"
-                "</speech>"
-            )
-        )
-
-    segments.append("</speech_round>")
-    return "".join(segments)
-
-
 def _build_speech_user_context(
     my_word: str,
     self_belief: SelfBelief,
@@ -405,7 +370,7 @@ def _build_speech_user_context(
     else:
         top_suspicion_block = "<top_suspicion />"
 
-    round_speeches_block = _format_round_speeches_xml(completed_speeches, current_round)
+    speech_logs_block = _format_speeches_xml(completed_speeches)
 
     return (
         "<speech_context>"
@@ -414,7 +379,7 @@ def _build_speech_user_context(
         f"{top_suspicion_block}"
         f'<strategy round="{current_round}" clarity="{clarity_code}">{escape(clarity_desc)}</strategy>'
         f'<speaker id="{escape(me)}" />'
-        f"{alive_block}{round_speeches_block}"
+        f'{alive_block}<current_round index="{current_round}" />{speech_logs_block}'
         "<response_guidance>Return exactly one line of speech; avoid emojis, labels, or extra commentary.</response_guidance>"
         "</speech_context>"
     )
@@ -471,7 +436,7 @@ def llm_update_player_mindset(
     old_self_belief = playerMindset.self_belief
 
     # 1. Format the system prompt (instructions)
-    system_prompt = _INFERENCE_SYSTEM_PROMPT.format(
+    system_prompt = _INFERENCE_PROMPT_PREFIX.format(
         my_word=my_word, player_count=len(players), spy_count=rules.get("spy_count", 1)
     )
 
@@ -510,7 +475,7 @@ def llm_generate_speech(
     alive: List[str],
     current_round: int,
 ) -> str:
-    system_prompt = _SPEECH_SYSTEM_PROMPT.format(my_word=my_word)
+    system_prompt = _SPEECH_PROMPT_PREFIX.format(my_word=my_word)
     user_context = _build_speech_user_context(
         my_word, self_belief, suspicions, completed_speeches, me, alive, current_round
     )
