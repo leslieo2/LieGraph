@@ -195,7 +195,7 @@ def _decide_player_vote(
 
     if player_scores:
         # Select the player with the maximum score
-        voted_target = max(player_scores, key=player_scores.get)
+        voted_target = min(player_scores, key=player_scores.get)
     else:
         # Fallback if no other players to score (e.g., only self is alive)
         other_alive = [p for p in alive if p != player_id]
