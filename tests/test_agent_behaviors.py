@@ -137,6 +137,68 @@ def test_agent_player_behavior_vote(agent_toolbox, base_state):
     assert memory.decisions[-1].target == "c"
 
 
+def test_agent_player_behavior_vote_consensus_strategy(base_state):
+    def updater(**_: Any) -> PlayerMindset:
+        return PlayerMindset(
+            self_belief=SelfBelief(role="civilian", confidence=0.9),
+            suspicions={},
+        )
+
+    def speaker(**_: Any) -> str:
+        return "ok"
+
+    def consensus_tool(**_: Any) -> str:
+        return "b"
+
+    toolbox = AgentToolbox(
+        mindset_updater=updater,
+        speech_generator=speaker,
+        vote_strategies={
+            "consensus": consensus_tool,
+            "eliminate-prime": consensus_tool,
+            "defensive": consensus_tool,
+        },
+    )
+
+    behavior = AgentPlayerBehavior(toolbox=toolbox, llm_client=Mock())
+    voting_state = base_state | {"game_phase": "voting", "phase_id": "1:voting:test"}
+    ctx = PlayerNodeContext(state=voting_state, player_id="a", extras={})
+
+    update = behavior.decide_vote(ctx)
+    assert update["current_votes"]["a"].target == "b"
+
+
+def test_agent_player_behavior_vote_defensive_strategy(base_state):
+    def updater(**_: Any) -> PlayerMindset:
+        return PlayerMindset(
+            self_belief=SelfBelief(role="civilian", confidence=0.3),
+            suspicions={},
+        )
+
+    def speaker(**_: Any) -> str:
+        return "ok"
+
+    def defensive_tool(**_: Any) -> str:
+        return "d"
+
+    toolbox = AgentToolbox(
+        mindset_updater=updater,
+        speech_generator=speaker,
+        vote_strategies={
+            "defensive": defensive_tool,
+            "eliminate-prime": defensive_tool,
+            "consensus": defensive_tool,
+        },
+    )
+
+    behavior = AgentPlayerBehavior(toolbox=toolbox, llm_client=Mock())
+    voting_state = base_state | {"game_phase": "voting", "phase_id": "1:voting:test"}
+    ctx = PlayerNodeContext(state=voting_state, player_id="a", extras={})
+
+    update = behavior.decide_vote(ctx)
+    assert update["current_votes"]["a"].target == "d"
+
+
 def test_agent_host_behavior_journal(base_state):
     behavior = AgentHostBehavior()
     ctx = HostNodeContext(state=base_state)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from src.tools.llm.inference import llm_update_player_mindset
@@ -11,6 +11,12 @@ from ...state import PlayerMindset
 
 if TYPE_CHECKING:  # pragma: no cover - typing helper
     from .behaviors import ObservationRecord, PlayerAgentMemory
+else:
+    from .vote_strategies import (
+        vote_align_with_consensus,
+        vote_counter_accuser,
+        vote_eliminate_prime,
+    )
 
 
 @dataclass(slots=True)
@@ -20,6 +26,7 @@ class AgentToolbox:
     mindset_updater: Callable[..., PlayerMindset]
     speech_generator: Callable[..., str]
     speech_strategies: Optional[Dict[str, Callable[..., str]]] = None
+    vote_strategies: Dict[str, Callable[..., str]] = field(default_factory=dict)
     vote_selector: Optional[Callable[..., str]] = None
     evidence_analyzer: Optional[Callable[[ObservationRecord], Dict[str, float]]] = None
     memory_summarizer: Optional[Callable[[PlayerAgentMemory], str]] = None
@@ -73,4 +80,9 @@ def default_toolbox() -> AgentToolbox:
         mindset_updater=_default_mindset_updater,
         speech_generator=_make_strategy_dispatcher(strategies),
         speech_strategies=strategies,
+        vote_strategies={
+            "eliminate-prime": vote_eliminate_prime,
+            "consensus": vote_align_with_consensus,
+            "defensive": vote_counter_accuser,
+        },
     )

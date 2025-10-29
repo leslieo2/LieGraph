@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
+from .toolbox import AgentToolbox, default_toolbox
+from ..shared.interfaces import (
+    BehaviorResult,
+    HostNodeContext,
+    PlayerNodeContext,
+)
+from ..workflow.behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
 from ...config import get_config
 from ...metrics import metrics_collector
 from ...rules import assign_roles_and_words, calculate_eliminated_player
@@ -22,15 +29,6 @@ from ...state import (
     merge_probs,
     next_alive_player,
 )
-from ..shared.interfaces import (
-    BehaviorResult,
-    HostBehavior,
-    HostNodeContext,
-    PlayerBehavior,
-    PlayerNodeContext,
-)
-from ..workflow.behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
-from .toolbox import AgentToolbox, default_toolbox
 
 
 def _utc_now() -> datetime:
@@ -345,6 +343,16 @@ class AgentPlayerBehavior(WorkflowPlayerBehavior):
         mindset: PlayerMindset,
         strategy: str,
     ) -> str:
+        strategies = self.toolbox.vote_strategies
+        if strategy in strategies:
+            strategy_fn = strategies[strategy]
+            return strategy_fn(
+                state=state,
+                player_id=player_id,
+                mindset=mindset,
+                strategy=strategy,
+            )
+
         selector = self.toolbox.vote_selector
         if selector is not None:
             return selector(
