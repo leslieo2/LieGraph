@@ -6,6 +6,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
+from .interfaces import (
+    BehaviorResult,
+    HostNodeContext,
+    PlayerNodeContext,
+)
+from .workflow_behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
+from .vote_strategies import (
+    vote_align_with_consensus,
+    vote_counter_accuser,
+    vote_eliminate_prime,
+)
 from ..config import get_config
 from ..llm_strategy import llm_generate_speech, llm_update_player_mindset
 from ..metrics import metrics_collector
@@ -23,14 +34,6 @@ from ..state import (
     merge_probs,
     next_alive_player,
 )
-from .interfaces import (
-    BehaviorResult,
-    HostBehavior,
-    HostNodeContext,
-    PlayerBehavior,
-    PlayerNodeContext,
-)
-from .workflow_behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
 
 
 def _utc_now() -> datetime:
@@ -94,6 +97,7 @@ class AgentToolbox:
 
     mindset_updater: Callable[..., PlayerMindset]
     speech_generator: Callable[..., str]
+    vote_strategies: Dict[str, Callable[..., str]] = field(default_factory=dict)
     vote_selector: Optional[Callable[..., str]] = None
     evidence_analyzer: Optional[Callable[[ObservationRecord], Dict[str, float]]] = None
     memory_summarizer: Optional[Callable[[PlayerAgentMemory], str]] = None
@@ -121,6 +125,11 @@ def _default_toolbox() -> AgentToolbox:
     return AgentToolbox(
         mindset_updater=_default_mindset_updater,
         speech_generator=_default_speech_generator,
+        vote_strategies={
+            "eliminate-prime": vote_eliminate_prime,
+            "consensus": vote_align_with_consensus,
+            "defensive": vote_counter_accuser,
+        },
     )
 
 
@@ -167,7 +176,6 @@ class AgentPlayerBehavior(WorkflowPlayerBehavior):
 
         strategy = self._choose_strategy(
             ctx.state,
-            player_id=ctx.player_id,
             mindset=updated_mindset,
             focus="speech",
         )
@@ -246,7 +254,6 @@ class AgentPlayerBehavior(WorkflowPlayerBehavior):
 
         strategy = self._choose_strategy(
             ctx.state,
-            player_id=ctx.player_id,
             mindset=updated_mindset,
             focus="vote",
         )
@@ -353,7 +360,6 @@ class AgentPlayerBehavior(WorkflowPlayerBehavior):
         self,
         state: GameState,
         *,
-        player_id: str,
         mindset: PlayerMindset,
         focus: str,
     ) -> str:
@@ -387,6 +393,16 @@ class AgentPlayerBehavior(WorkflowPlayerBehavior):
         mindset: PlayerMindset,
         strategy: str,
     ) -> str:
+        strategies = self.toolbox.vote_strategies
+        if strategy in strategies:
+            strategy_fn = strategies[strategy]
+            return strategy_fn(
+                state=state,
+                player_id=player_id,
+                mindset=mindset,
+                strategy=strategy,
+            )
+
         selector = self.toolbox.vote_selector
         if selector is not None:
             return selector(
