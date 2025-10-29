@@ -18,7 +18,9 @@ def trim_text_for_prompt(text: str, limit: int = 180) -> str:
 
 
 def format_players_xml(players: Sequence[str], alive: Sequence[str], me: str) -> str:
-    alive_tags = "".join(f'<player id="{escape(pid)}" status="alive" />' for pid in alive)
+    alive_tags = "".join(
+        f'<player id="{escape(pid)}" status="alive" />' for pid in alive
+    )
     roster_tags = "".join(f'<player id="{escape(pid)}" />' for pid in players)
     return (
         f'<players me="{escape(me)}">'

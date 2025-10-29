@@ -50,7 +50,9 @@ Guide:
 Reply now with your single-line speech."""
 
 
-def _determine_clarity(role: str, self_confidence: float, current_round: int) -> tuple[str, str]:
+def _determine_clarity(
+    role: str, self_confidence: float, current_round: int
+) -> tuple[str, str]:
     """Return role-aware clarity code and description for the current round."""
 
     if role == "spy" and self_confidence > 0.5:
@@ -115,7 +117,9 @@ def _sanitize_speech_output(text: Any) -> str:
         return ""
 
     raw = str(text)
-    lines = [line.strip() for line in raw.replace("\r", "").splitlines() if line.strip()]
+    lines = [
+        line.strip() for line in raw.replace("\r", "").splitlines() if line.strip()
+    ]
     candidate = lines[-1] if lines else raw.strip()
     candidate = candidate.replace("\n", " ")
     candidate = _EMOJI_REGEX.sub("", candidate)
@@ -125,7 +129,11 @@ def _sanitize_speech_output(text: Any) -> str:
 
 def _format_speech_system_prompt(my_word: str, self_belief: SelfBelief) -> str:
     is_confident_spy = self_belief.role == "spy" and self_belief.confidence >= 0.7
-    template = _SPY_SPEECH_PROMPT_PREFIX if is_confident_spy else _CIVILIAN_SPEECH_PROMPT_PREFIX
+    template = (
+        _SPY_SPEECH_PROMPT_PREFIX
+        if is_confident_spy
+        else _CIVILIAN_SPEECH_PROMPT_PREFIX
+    )
     return template.format(my_word=my_word)
 
 

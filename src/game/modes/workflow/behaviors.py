@@ -250,9 +250,7 @@ class WorkflowPlayerBehavior(PlayerBehavior):
 
         player_context, my_word = self._get_player_context(state, player_id)
 
-        print(
-            f"🗳️ PLAYER VOTE: {player_id} is voting in round {state['current_round']}"
-        )
+        print(f"🗳️ PLAYER VOTE: {player_id} is voting in round {state['current_round']}")
 
         config = get_config()
         private_state = player_context["private"]

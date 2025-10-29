@@ -110,7 +110,11 @@ def test_player_speech(
 @patch("src.game.nodes.player.llm_update_player_mindset")
 @patch("src.tools.llm.get_default_llm_client")
 def test_player_vote(
-    mock_get_client, mock_infer, mock_vote_metric, player_id, base_player_state: GameState
+    mock_get_client,
+    mock_infer,
+    mock_vote_metric,
+    player_id,
+    base_player_state: GameState,
 ):
     """Tests the player_vote node with mocked LLM calls."""
     # Arrange: Configure mocks

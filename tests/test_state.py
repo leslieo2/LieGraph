@@ -238,9 +238,7 @@ class TestUtilityFunctions:
 
         sample_state["eliminated_players"] = ["player2", "player3", "player4"]
         # No other alive players remain after the requester
-        assert (
-            next_alive_player(sample_state, starting_after="player1") is None
-        )
+        assert next_alive_player(sample_state, starting_after="player1") is None
 
     def test_votes_ready_no_votes(self, sample_state):
         """Test votes_ready when no votes exist"""

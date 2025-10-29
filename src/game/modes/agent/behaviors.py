@@ -343,19 +343,21 @@ class AgentPlayerBehavior(WorkflowPlayerBehavior):
         mindset: PlayerMindset,
         strategy: str,
     ) -> str:
-        strategies = self.toolbox.vote_strategies
-        if strategy in strategies:
-            strategy_fn = strategies[strategy]
-            return strategy_fn(
+        selector = self.toolbox.vote_selector
+        if selector is not None:
+            target = selector(
                 state=state,
                 player_id=player_id,
                 mindset=mindset,
                 strategy=strategy,
             )
+            if target is not None:
+                return target
 
-        selector = self.toolbox.vote_selector
-        if selector is not None:
-            return selector(
+        strategies = self.toolbox.vote_strategies
+        if strategy in strategies:
+            strategy_fn = strategies[strategy]
+            return strategy_fn(
                 state=state,
                 player_id=player_id,
                 mindset=mindset,

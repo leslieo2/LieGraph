@@ -158,5 +158,7 @@ def llm_update_player_mindset(
         log_self_belief_update(me, existing_self_belief, new_mindset.self_belief)
         return new_mindset
 
-    log_self_belief_update(me, existing_self_belief, existing_player_mindset.self_belief)
+    log_self_belief_update(
+        me, existing_self_belief, existing_player_mindset.self_belief
+    )
     return existing_player_mindset

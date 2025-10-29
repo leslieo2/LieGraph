@@ -36,4 +36,3 @@ def test_on_vote_cast_records_vote(collector):
     assert record["vote_target"] == "b"
     assert record["voter_role"] == "civilian"
     assert record["target_role"] == "spy"
-

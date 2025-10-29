@@ -41,7 +41,7 @@ def _default_mindset_updater(**kwargs: Any) -> PlayerMindset:
 
 
 def _make_strategy_dispatcher(
-    strategies: Dict[str, Callable[..., str]]
+    strategies: Dict[str, Callable[..., str]],
 ) -> Callable[..., str]:
     """Create a dispatcher that selects speech generators by strategy key."""
 
@@ -52,9 +52,11 @@ def _make_strategy_dispatcher(
 
         generator = None
         if strategy_key is not None:
-            generator = strategies.get(strategy_key) or strategies.get(
-                strategy_key.replace("_", "-")
-            ) or strategies.get(strategy_key.replace("-", "_"))
+            generator = (
+                strategies.get(strategy_key)
+                or strategies.get(strategy_key.replace("_", "-"))
+                or strategies.get(strategy_key.replace("-", "_"))
+            )
 
         if generator is None:
             generator = strategies.get("default")
