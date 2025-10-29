@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 from src.game.nodes.player import player_speech, player_vote
 from src.game.state import (
     GameState,
@@ -8,6 +8,8 @@ from src.game.state import (
     SelfBelief,
     Suspicion,
 )
+
+pytestmark = pytest.mark.workflow
 
 
 @pytest.fixture
@@ -72,7 +74,7 @@ def base_player_state(player_id):
 
 @patch("src.game.nodes.player.llm_generate_speech")
 @patch("src.game.nodes.player.llm_update_player_mindset")
-@patch("src.game.agents.workflow_behaviors._get_llm_client")
+@patch("src.tools.llm.get_default_llm_client")
 def test_player_speech(
     mock_get_client, mock_infer, mock_speech, player_id, base_player_state: GameState
 ):
@@ -104,10 +106,11 @@ def test_player_speech(
     mock_speech.assert_called_once()
 
 
+@patch("src.game.modes.workflow.behaviors.metrics_collector.on_vote_cast", create=True)
 @patch("src.game.nodes.player.llm_update_player_mindset")
-@patch("src.game.agents.workflow_behaviors._get_llm_client")
+@patch("src.tools.llm.get_default_llm_client")
 def test_player_vote(
-    mock_get_client, mock_infer, player_id, base_player_state: GameState
+    mock_get_client, mock_infer, mock_vote_metric, player_id, base_player_state: GameState
 ):
     """Tests the player_vote node with mocked LLM calls."""
     # Arrange: Configure mocks

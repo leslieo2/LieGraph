@@ -348,3 +348,30 @@ def llm_from_config(
     )
 
     return llm, overrides
+
+
+_DEFAULT_CLIENT: ChatOpenAI | None = None
+
+
+def get_default_llm_client() -> ChatOpenAI:
+    """Return a lazily constructed shared LLM client."""
+
+    global _DEFAULT_CLIENT
+    if _DEFAULT_CLIENT is None:
+        _DEFAULT_CLIENT = create_llm()
+    return _DEFAULT_CLIENT
+
+
+from .inference import llm_update_player_mindset, log_self_belief_update
+from .speech import llm_generate_speech
+
+__all__ = [
+    "create_llm",
+    "require_llm_provider_api_key",
+    "overrides_from_config",
+    "llm_from_config",
+    "get_default_llm_client",
+    "llm_update_player_mindset",
+    "log_self_belief_update",
+    "llm_generate_speech",
+]

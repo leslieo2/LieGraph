@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Mapping, Optional
 
-from .interfaces import HostBehavior, PlayerBehavior
-from .workflow_behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
-from .agent_behavior import AgentHostBehavior, AgentPlayerBehavior
+from .agent.behaviors import AgentHostBehavior, AgentPlayerBehavior
+from .shared.interfaces import HostBehavior, PlayerBehavior
+from .workflow.behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
 
 
 @dataclass(slots=True)

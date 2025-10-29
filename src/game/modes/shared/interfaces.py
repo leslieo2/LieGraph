@@ -1,17 +1,11 @@
-"""Behavior abstraction contracts for host and player nodes.
-
-This module defines the protocol interfaces that decouple LangGraph nodes
-from concrete behavior implementations. Nodes build a lightweight context
-object and delegate the decision making to these behaviors, allowing the
-project to plug in either workflow-based or agentic strategies.
-"""
+"""Behavior abstraction contracts for host and player nodes."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, Protocol, runtime_checkable
 
-from ..state import GameState
+from ...state import GameState
 
 # Shared type alias for return payloads produced by behavior implementations.
 BehaviorResult = Dict[str, Any]

@@ -273,20 +273,41 @@ def alive_players(state: GameState) -> List[str]:
     return [p for p in state["players"] if p not in eliminated]
 
 
-def next_alive_player(state: GameState) -> str | None:
+def next_alive_player(
+    state: GameState, starting_after: str | None = None
+) -> str | None:
     """
-    Get the next player who should speak in the current round.
+    Get the next player who should speak in the current round or,
+    when provided, the next alive player after a given player.
 
     Calculates next speaker based on alive_players and completed_speeches
     (current round sequence progress).
 
     Args:
         state: The current game state
+        starting_after: Optional player ID. When provided, return the next
+            alive player after this player (wrapping around if needed).
 
     Returns:
-        Player ID of the next speaker, or None if everyone has spoken this round
+        Player ID of the next speaker (or next alive player after starting_after),
+        or None if no eligible player remains
     """
     alive = alive_players(state)
+
+    if not alive:
+        return None
+
+    if starting_after is not None:
+        if starting_after in alive:
+            start_index = alive.index(starting_after)
+            ordered_alive = alive[start_index + 1 :] + alive[:start_index]
+        else:
+            ordered_alive = alive
+
+        for player in ordered_alive:
+            if player != starting_after:
+                return player
+        return None
 
     # Get current round speech records, sorted by seq
     speeches_this_round = [

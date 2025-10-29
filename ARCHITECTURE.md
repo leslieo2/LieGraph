@@ -77,9 +77,9 @@ LieGraph follows a **state machine architecture** built on LangGraph, with clear
 - `merge_private_states`: Incremental mindset updates
 - `add`: Append-only operations for immutable records
 
-### 3. AI Strategy (`src/game/llm_strategy.py`)
+### 3. AI Strategy (`src/tools/llm/`)
 
-**Purpose**: Implements intelligent agent behavior through LLM reasoning.
+**Purpose**: Houses reusable LLM clients plus inference and speech strategies shared across modes.
 
 **Core Intelligence Systems**:
 - **Dynamic Identity Inference**: Real-time role analysis through conversation patterns
@@ -101,16 +101,29 @@ LieGraph follows a **state machine architecture** built on LangGraph, with clear
 - **Vote Processing**: Majority voting with tie-breaking logic
 - **Win Detection**: Civilian and spy victory condition checking
 
-### 5. Player Nodes (`src/game/nodes/player.py`)
+### 5. Player Nodes (`src/game/nodes/host.py` & `src/game/nodes/player.py`)
 
-**Purpose**: LangGraph nodes for player actions and state updates.
+**Purpose**: Thin LangGraph adapters that resolve the active mode and delegate to mode-specific implementations.
 
-**Node Types**:
-- **Speech Nodes**: Generate strategic descriptions and update mindsets
-- **Vote Nodes**: Make evidence-based voting decisions
-- **Context Integration**: Combine public and private state for reasoning
+**Responsibilities**:
+- Use `resolve_behavior_mode` to derive the active mode from the running state or configuration defaults.
+- Construct shared `HostNodeContext` and `PlayerNodeContext` instances with LLM helper extras.
+- Forward execution to `src.game.modes.<mode>.nodes`, which in turn invoke the registered behaviors.
 
-### 6. Configuration (`src/game/config.py`)
+### 6. Mode Packages (`src/game/modes/`)
+
+**Purpose**: Encapsulate all behavior, toolbox, and node logic for each execution mode.
+
+**Layout**:
+- `shared/`: Behavior protocols, node contexts, and the `BehaviorRegistry`.
+- `workflow/`: Deterministic workflow behaviors plus node wrappers that call into the registry.
+- `agent/`: Agent behaviors with memory, strategy tooling, and reusable toolboxes.
+
+**Registry Pattern**:
+- `modes/registry.py` hosts `create_behavior_registry`, `get_*_behavior`, and `register_behavior_registry`.
+- Modes resolve behaviors through the registry so overrides apply consistently across nodes and tooling.
+
+### 7. Configuration (`src/game/config.py`)
 
 **Purpose**: Centralized configuration management with validation.
 

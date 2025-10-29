@@ -21,3 +21,7 @@ dependencies = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "workflow: tests covering workflow-mode behaviors",
+    "agent: tests covering agent-mode behaviors",
+]

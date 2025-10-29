@@ -1,10 +1,14 @@
-"""Player node entry points that delegate to configured behaviors."""
+"""Player node entry points that delegate to mode-specific behaviors."""
 
 from typing import Any, Dict
 
-from ..agents import PlayerNodeContext, get_player_behavior
-from ..llm_strategy import llm_generate_speech, llm_update_player_mindset
+from ..config import resolve_behavior_mode
+from ..modes.agent import nodes as agent_nodes
+from ..modes.shared import PlayerNodeContext
+from ..modes.workflow import nodes as workflow_nodes
 from ..state import GameState
+from src.tools.llm.inference import llm_update_player_mindset
+from src.tools.llm.speech import llm_generate_speech
 
 __all__ = [
     "player_speech",
@@ -13,16 +17,16 @@ __all__ = [
     "llm_update_player_mindset",
 ]
 
-_DEFAULT_BEHAVIOR_MODE = "workflow"
+_PLAYER_DELEGATES = {
+    "workflow": workflow_nodes,
+    "agent": agent_nodes,
+}
 
 
 def _behavior_mode_from_state(state: GameState) -> str:
-    """Read the behavior mode from state, defaulting to workflow."""
+    """Resolve the active behavior mode using configuration fallbacks."""
 
-    mode = state.get("behavior_mode")
-    if isinstance(mode, str) and mode:
-        return mode
-    return _DEFAULT_BEHAVIOR_MODE
+    return resolve_behavior_mode(state=state)
 
 
 def _build_player_behavior_extras() -> Dict[str, Any]:
@@ -37,22 +41,30 @@ def _build_player_behavior_extras() -> Dict[str, Any]:
 def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     """Generate player speech by delegating to the configured behavior."""
 
-    behavior = get_player_behavior(player_id, mode=_behavior_mode_from_state(state))
+    mode = _behavior_mode_from_state(state)
+    try:
+        delegate = _PLAYER_DELEGATES[mode]
+    except KeyError as exc:  # pragma: no cover - guardrail for future modes
+        raise ValueError(f"Unsupported behavior mode: {mode}") from exc
     ctx = PlayerNodeContext(
         state=state,
         player_id=player_id,
         extras=_build_player_behavior_extras(),
     )
-    return behavior.decide_speech(ctx)
+    return delegate.player_speech(ctx)
 
 
 def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     """Generate player vote updates by delegating to the configured behavior."""
 
-    behavior = get_player_behavior(player_id, mode=_behavior_mode_from_state(state))
+    mode = _behavior_mode_from_state(state)
+    try:
+        delegate = _PLAYER_DELEGATES[mode]
+    except KeyError as exc:  # pragma: no cover
+        raise ValueError(f"Unsupported behavior mode: {mode}") from exc
     ctx = PlayerNodeContext(
         state=state,
         player_id=player_id,
         extras=_build_player_behavior_extras(),
     )
-    return behavior.decide_vote(ctx)
+    return delegate.player_vote(ctx)

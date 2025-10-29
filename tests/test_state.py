@@ -226,6 +226,22 @@ class TestUtilityFunctions:
         next_player = next_alive_player(sample_state)
         assert next_player is None  # All players have spoken
 
+    def test_next_alive_player_starting_after(self, sample_state):
+        """Test next_alive_player when starting_after is provided"""
+        sample_state["eliminated_players"] = ["player3"]
+
+        assert next_alive_player(sample_state, starting_after="player1") == "player2"
+        assert next_alive_player(sample_state, starting_after="player2") == "player4"
+        assert next_alive_player(sample_state, starting_after="player4") == "player1"
+        # When starting_after is eliminated it should fall back to first alive player
+        assert next_alive_player(sample_state, starting_after="player3") == "player1"
+
+        sample_state["eliminated_players"] = ["player2", "player3", "player4"]
+        # No other alive players remain after the requester
+        assert (
+            next_alive_player(sample_state, starting_after="player1") is None
+        )
+
     def test_votes_ready_no_votes(self, sample_state):
         """Test votes_ready when no votes exist"""
         sample_state["game_phase"] = "voting"

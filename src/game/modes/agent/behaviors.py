@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
-from ..config import get_config
-from ..llm_strategy import llm_generate_speech, llm_update_player_mindset
-from ..metrics import metrics_collector
-from ..rules import assign_roles_and_words, calculate_eliminated_player
-from ..state import (
+from ...config import get_config
+from ...metrics import metrics_collector
+from ...rules import assign_roles_and_words, calculate_eliminated_player
+from ...state import (
     GameState,
     PlayerMindset,
     PlayerPrivateState,
@@ -23,14 +22,15 @@ from ..state import (
     merge_probs,
     next_alive_player,
 )
-from .interfaces import (
+from ..shared.interfaces import (
     BehaviorResult,
     HostBehavior,
     HostNodeContext,
     PlayerBehavior,
     PlayerNodeContext,
 )
-from .workflow_behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
+from ..workflow.behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
+from .toolbox import AgentToolbox, default_toolbox
 
 
 def _utc_now() -> datetime:
@@ -88,42 +88,6 @@ class HostJournalEntry:
     ts: datetime = field(default_factory=_utc_now)
 
 
-@dataclass(slots=True)
-class AgentToolbox:
-    """Container for customizable agent tool callables."""
-
-    mindset_updater: Callable[..., PlayerMindset]
-    speech_generator: Callable[..., str]
-    vote_selector: Optional[Callable[..., str]] = None
-    evidence_analyzer: Optional[Callable[[ObservationRecord], Dict[str, float]]] = None
-    memory_summarizer: Optional[Callable[[PlayerAgentMemory], str]] = None
-
-
-def _default_mindset_updater(**kwargs: Any) -> PlayerMindset:
-    """Proxy mindset updater that ignores agent-specific kwargs."""
-
-    kwargs.pop("strategy", None)
-    kwargs.pop("analysis", None)
-    return llm_update_player_mindset(**kwargs)
-
-
-def _default_speech_generator(**kwargs: Any) -> str:
-    """Proxy speech generator that ignores agent-specific kwargs."""
-
-    kwargs.pop("strategy", None)
-    kwargs.pop("analysis", None)
-    return llm_generate_speech(**kwargs)
-
-
-def _default_toolbox() -> AgentToolbox:
-    """Create the default toolbox wired to workflow LLM helpers."""
-
-    return AgentToolbox(
-        mindset_updater=_default_mindset_updater,
-        speech_generator=_default_speech_generator,
-    )
-
-
 class AgentPlayerBehavior(WorkflowPlayerBehavior):
     """Agent behavior that extends workflow logic with memory and strategy selection."""
 
@@ -134,7 +98,7 @@ class AgentPlayerBehavior(WorkflowPlayerBehavior):
         toolbox: AgentToolbox | None = None,
     ) -> None:
         super().__init__(llm_client=llm_client)
-        self.toolbox = toolbox or _default_toolbox()
+        self.toolbox = toolbox or default_toolbox()
         self._memory: Dict[str, PlayerAgentMemory] = {}
 
     def memory_for(self, player_id: str) -> PlayerAgentMemory:
@@ -198,12 +162,6 @@ class AgentPlayerBehavior(WorkflowPlayerBehavior):
             phase=ctx.state["game_phase"],
             player_id=ctx.player_id,
             mindset=updated_mindset,
-        )
-        metrics_collector.on_speech(
-            game_id=ctx.state.get("game_id"),
-            round_number=ctx.state["current_round"],
-            player_id=ctx.player_id,
-            content=speech_text,
         )
 
         speech_record: Speech = create_speech_record(

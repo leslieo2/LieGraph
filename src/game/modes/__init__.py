@@ -1,36 +1,29 @@
-"""Agent and workflow behavior abstractions for LieGraph."""
+"""Mode-specific behavior packages for LieGraph."""
 
-from .behavior_factory import (
+from .registry import (
     BehaviorRegistry,
     create_behavior_registry,
     get_host_behavior,
     get_player_behavior,
     register_behavior_registry,
 )
-from .interfaces import (
+from .shared import (
     BehaviorResult,
     HostBehavior,
     HostNodeContext,
     PlayerBehavior,
     PlayerNodeContext,
 )
-from .workflow_behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
-from .agent_behavior import AgentHostBehavior, AgentPlayerBehavior, AgentToolbox
 
 __all__ = [
     "BehaviorRegistry",
     "BehaviorResult",
     "HostBehavior",
     "HostNodeContext",
-    "WorkflowHostBehavior",
-    "WorkflowPlayerBehavior",
-    "AgentHostBehavior",
-    "AgentPlayerBehavior",
-    "AgentToolbox",
+    "PlayerBehavior",
+    "PlayerNodeContext",
     "create_behavior_registry",
     "get_host_behavior",
     "get_player_behavior",
     "register_behavior_registry",
-    "PlayerBehavior",
-    "PlayerNodeContext",
 ]

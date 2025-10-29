@@ -7,9 +7,9 @@ from uuid import uuid4
 
 from langchain_core.runnables import RunnableConfig
 
-from ..config import get_config
-from ..graph import build_workflow_with_players
-from .behavior_factory import get_host_behavior, get_player_behavior
+from ...config import get_config
+from ...graph import build_workflow_with_players
+from ..registry import get_host_behavior, get_player_behavior
 
 
 def run_demo(*, behavior_mode: str = "agent", players: list[str] | None = None) -> None:
