@@ -15,7 +15,8 @@ dependencies = [
     "trustcall",
     "python-dotenv",
     "pytest",
-    "PyYAML"
+    "PyYAML",
+    "black"
 ]
 
 [tool.pytest.ini_options]
