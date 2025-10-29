@@ -440,7 +440,8 @@ def llm_generate_speech(
         HumanMessage(content=user_context),
     ]
 
-    response = _get_llm_client().invoke(messages)
+    client = llm_client if llm_client is not None else _get_llm_client()
+    response = client.invoke(messages)
 
     raw_text = response.content if hasattr(response, "content") else response
     return _sanitize_speech_output(raw_text)
