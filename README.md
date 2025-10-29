@@ -149,6 +149,7 @@ Customize the game by editing `config.yaml`:
 
 ```yaml
 game:
+  behavior_mode: workflow  # Switch to 'agent' for memory-driven behaviors
   player_count: 6
   vocabulary:
     - ["Shakespeare", "Dumas"]
@@ -158,6 +159,15 @@ game:
     - "Bob"
     # ...
 ```
+
+### Agent Mode & Demo
+
+- Set `behavior_mode: agent` in `config.yaml` (or inject `{"behavior_mode": "agent"}` into the initial game state) to enable the agent memory/strategy layer.
+- Run a quick terminal demo with strategy logs:
+  ```bash
+  uv run python -m src.game.agents.play_demo --mode agent
+  ```
+  Use `--mode workflow` to compare the legacy deterministic flow.
 
 ## 📊 Metrics & Evaluation
 

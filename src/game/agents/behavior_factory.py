@@ -1,4 +1,5 @@
 """Factory helpers for resolving host and player behavior implementations."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -6,6 +7,7 @@ from typing import Dict, Mapping, Optional
 
 from .interfaces import HostBehavior, PlayerBehavior
 from .workflow_behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
+from .agent_behavior import AgentHostBehavior, AgentPlayerBehavior
 
 
 @dataclass(slots=True)
@@ -32,11 +34,14 @@ def create_behavior_registry(
 ) -> BehaviorRegistry:
     """Create a registry of behaviors according to the requested mode."""
 
-    if mode != "workflow":
+    if mode == "workflow":
+        host = host_behavior or WorkflowHostBehavior()
+        default_player = default_player_behavior or WorkflowPlayerBehavior()
+    elif mode == "agent":
+        host = host_behavior or AgentHostBehavior()
+        default_player = default_player_behavior or AgentPlayerBehavior()
+    else:
         raise ValueError(f"Unsupported behavior mode: {mode}")
-
-    host = host_behavior or WorkflowHostBehavior()
-    default_player = default_player_behavior or WorkflowPlayerBehavior()
 
     return BehaviorRegistry(
         host_behavior=host,
@@ -44,8 +49,10 @@ def create_behavior_registry(
         player_overrides=dict(player_overrides or {}),
     )
 
+
 _REGISTRIES: Dict[str, BehaviorRegistry] = {
-    "workflow": create_behavior_registry(mode="workflow")
+    "workflow": create_behavior_registry(mode="workflow"),
+    "agent": create_behavior_registry(mode="agent"),
 }
 
 

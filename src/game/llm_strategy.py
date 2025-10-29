@@ -38,7 +38,16 @@ from src.tools.llm import create_llm
 # Use config.get_game_rules() to get game rules
 
 # --- LLM Clients ---
-llm_client = create_llm()
+# Use lazy loading to avoid initialization issues during testing
+_llm_client = None
+
+
+def _get_llm_client():
+    """Get or create the LLM client with lazy initialization."""
+    global _llm_client
+    if _llm_client is None:
+        _llm_client = create_llm()
+    return _llm_client
 
 
 # --- Helper Functions ---
@@ -431,7 +440,8 @@ def llm_generate_speech(
         HumanMessage(content=user_context),
     ]
 
-    response = llm_client.invoke(messages)
+    client = llm_client if llm_client is not None else _get_llm_client()
+    response = client.invoke(messages)
 
     raw_text = response.content if hasattr(response, "content") else response
     return _sanitize_speech_output(raw_text)

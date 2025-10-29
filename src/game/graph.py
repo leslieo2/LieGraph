@@ -186,6 +186,7 @@ def main():
     print(f"  Player count: {config.player_count}")
     print(f"  Players: {players}")
     print(f"  Vocabulary pairs: {len(config.vocabulary)}")
+    print(f"  Behavior mode: {config.behavior_mode}")
 
     # Build and run the workflow
     app = build_workflow_with_players(players)
@@ -195,6 +196,7 @@ def main():
         "game_id": f"game-{uuid4()}",
         "players": players,
         "game_phase": "setup",
+        "behavior_mode": config.behavior_mode,
     }
 
     langgraph_config = RunnableConfig(

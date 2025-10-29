@@ -1,4 +1,5 @@
 """Tests for workflow-aligned behavior implementations."""
+
 from typing import Any
 from unittest.mock import Mock
 
@@ -16,7 +17,7 @@ from src.game.state import (
 
 @pytest.fixture
 def player_behavior() -> WorkflowPlayerBehavior:
-    return WorkflowPlayerBehavior()
+    return WorkflowPlayerBehavior(llm_client=Mock())
 
 
 @pytest.fixture

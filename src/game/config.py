@@ -55,6 +55,7 @@ class GameConfig:
         """Get default configuration."""
         return {
             "game": {
+                "behavior_mode": "workflow",
                 "player_count": 4,
                 "vocabulary": [
                     ["苹果", "香蕉"],
@@ -103,6 +104,16 @@ class GameConfig:
             raise ValueError(f"Player count cannot exceed {max_players}")
 
         return count
+
+    @property
+    def behavior_mode(self) -> str:
+        """Get the configured behavior mode (workflow or agent)."""
+        mode = self._config["game"].get("behavior_mode", "workflow")
+        if mode not in {"workflow", "agent"}:
+            raise ValueError(
+                f"Unsupported behavior mode '{mode}'. Expected 'workflow' or 'agent'."
+            )
+        return mode
 
     @property
     def vocabulary(self) -> List[Tuple[str, str]]:
@@ -166,6 +177,9 @@ class GameConfig:
             names = self.generate_player_names()
             if len(names) != self.player_count:
                 raise ValueError("Name generation failed")
+
+            # Validate behavior mode
+            _ = self.behavior_mode
 
             return True
         except Exception as e:

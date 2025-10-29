@@ -1,4 +1,5 @@
 """Workflow-aligned behavior implementations for host and player nodes."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,7 +8,7 @@ from typing import Any, Dict, Optional, cast
 
 from ..config import get_config
 from ..llm_strategy import (
-    llm_client as default_llm_client,
+    _get_llm_client,
     llm_generate_speech,
     llm_update_player_mindset,
 )
@@ -107,9 +108,9 @@ class WorkflowHostBehavior(HostBehavior):
 
         temp_state = cast(GameState, state.copy())
         if eliminated_player:
-            temp_state["eliminated_players"] = state.get(
-                "eliminated_players", []
-            ) + [eliminated_player]
+            temp_state["eliminated_players"] = state.get("eliminated_players", []) + [
+                eliminated_player
+            ]
 
         winner = determine_winner(temp_state, state["host_private_state"])
 
@@ -153,7 +154,15 @@ class WorkflowPlayerBehavior(PlayerBehavior):
     """Workflow behavior that mirrors the existing player node logic."""
 
     def __init__(self, llm_client: Any | None = None) -> None:
-        self.llm_client = llm_client or default_llm_client
+        self._llm_client = llm_client
+        self._use_custom_client = llm_client is not None
+
+    @property
+    def llm_client(self) -> Any:
+        """Get the LLM client, using custom client if provided, otherwise lazy-loading default."""
+        if self._use_custom_client:
+            return self._llm_client
+        return _get_llm_client()
 
     def decide_speech(self, ctx: PlayerNodeContext) -> BehaviorResult:
         state = ctx.state
@@ -178,9 +187,7 @@ class WorkflowPlayerBehavior(PlayerBehavior):
         update_mindset_fn = ctx.extras.get(
             "llm_update_player_mindset", llm_update_player_mindset
         )
-        generate_speech_fn = ctx.extras.get(
-            "llm_generate_speech", llm_generate_speech
-        )
+        generate_speech_fn = ctx.extras.get("llm_generate_speech", llm_generate_speech)
 
         updated_mindset = update_mindset_fn(
             llm_client=self.llm_client,
