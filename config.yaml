@@ -2,6 +2,9 @@
 # This file contains configurable parameters for the LieGraph game
 
 game:
+  # Behavior implementation mode: workflow (deterministic) or agent (memory + strategy)
+  behavior_mode: workflow
+
   # Number of players in the game (minimum 3)
   player_count: 6
 

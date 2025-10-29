@@ -15,6 +15,7 @@ from .interfaces import (
     PlayerNodeContext,
 )
 from .workflow_behaviors import WorkflowHostBehavior, WorkflowPlayerBehavior
+from .agent_behavior import AgentHostBehavior, AgentPlayerBehavior, AgentToolbox
 
 __all__ = [
     "BehaviorRegistry",
@@ -23,6 +24,9 @@ __all__ = [
     "HostNodeContext",
     "WorkflowHostBehavior",
     "WorkflowPlayerBehavior",
+    "AgentHostBehavior",
+    "AgentPlayerBehavior",
+    "AgentToolbox",
     "create_behavior_registry",
     "get_host_behavior",
     "get_player_behavior",

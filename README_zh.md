@@ -150,6 +150,7 @@ graph TD
 
 ```yaml
 game:
+  behavior_mode: workflow  # 切换为 agent 启用记忆策略行为
   player_count: 6
   vocabulary:
     - ["Shakespeare", "Dumas"]
@@ -159,6 +160,15 @@ game:
     - "Bob"
     # ...
 ```
+
+### Agent 模式与演示
+
+- 在 `config.yaml` 中设置 `behavior_mode: agent`（或在初始状态写入 `{"behavior_mode": "agent"}`）即可启用记忆驱动的 Agent 行为。
+- 通过命令行体验策略日志输出：
+  ```bash
+  uv run python -m src.game.agents.play_demo --mode agent
+  ```
+  使用 `--mode workflow` 可以对比传统流程。
 
 ## 📊 指标与评估
 

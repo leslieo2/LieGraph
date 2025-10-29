@@ -19,7 +19,7 @@ Key Concepts:
 import time
 import uuid
 from operator import add
-from typing import List, Literal, TypedDict, Annotated, Optional, Dict, Any
+from typing import List, Literal, TypedDict, Annotated, Optional, Dict, Any, NotRequired
 
 from pydantic import BaseModel, Field
 
@@ -253,6 +253,7 @@ class GameState(TypedDict):
     player_private_states: Annotated[
         Dict[str, PlayerPrivateState], merge_private_states
     ]
+    behavior_mode: NotRequired[Literal["workflow", "agent"]]
 
 
 # --- State-derived Helper Functions ---

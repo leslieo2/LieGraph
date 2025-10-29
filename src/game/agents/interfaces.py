@@ -5,6 +5,7 @@ from concrete behavior implementations. Nodes build a lightweight context
 object and delegate the decision making to these behaviors, allowing the
 project to plug in either workflow-based or agentic strategies.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

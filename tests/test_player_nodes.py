@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 from src.game.nodes.player import player_speech, player_vote
 from src.game.state import (
     GameState,
@@ -72,11 +72,13 @@ def base_player_state(player_id):
 
 @patch("src.game.nodes.player.llm_generate_speech")
 @patch("src.game.nodes.player.llm_update_player_mindset")
+@patch("src.game.agents.workflow_behaviors._get_llm_client")
 def test_player_speech(
-    mock_infer, mock_speech, player_id, base_player_state: GameState
+    mock_get_client, mock_infer, mock_speech, player_id, base_player_state: GameState
 ):
     """Tests the player_speech node with mocked LLM calls."""
     # Arrange: Configure mocks to return predictable values
+    mock_get_client.return_value = Mock()
     mock_infer.return_value = PlayerMindset(
         self_belief=SelfBelief(role="civilian", confidence=0.9),
         suspicions={"c": Suspicion(role="spy", confidence=0.7, reason="vague")},
@@ -103,9 +105,13 @@ def test_player_speech(
 
 
 @patch("src.game.nodes.player.llm_update_player_mindset")
-def test_player_vote(mock_infer, player_id, base_player_state: GameState):
+@patch("src.game.agents.workflow_behaviors._get_llm_client")
+def test_player_vote(
+    mock_get_client, mock_infer, player_id, base_player_state: GameState
+):
     """Tests the player_vote node with mocked LLM calls."""
     # Arrange: Configure mocks
+    mock_get_client.return_value = Mock()
     mock_infer.return_value = PlayerMindset(
         self_belief=SelfBelief(role="civilian", confidence=0.9),
         suspicions={"c": Suspicion(role="spy", confidence=0.8, reason="very vague")},
