@@ -6,19 +6,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Optional, cast
 
-from ..config import get_config
-from ..llm_strategy import (
-    _get_llm_client,
-    llm_generate_speech,
-    llm_update_player_mindset,
-)
-from ..metrics import metrics_collector
-from ..rules import (
+from ...config import get_config
+from src.tools.llm import get_default_llm_client
+from src.tools.llm.inference import llm_update_player_mindset
+from src.tools.llm.speech import llm_generate_speech
+from ...metrics import metrics_collector
+from ...rules import (
     assign_roles_and_words,
     calculate_eliminated_player,
     determine_winner,
 )
-from ..state import (
+from ...state import (
     GameState,
     PlayerMindset,
     PlayerPrivateState,
@@ -31,7 +29,7 @@ from ..state import (
     merge_probs,
     next_alive_player,
 )
-from .interfaces import (
+from ..shared.interfaces import (
     BehaviorResult,
     HostBehavior,
     HostNodeContext,
@@ -162,7 +160,7 @@ class WorkflowPlayerBehavior(PlayerBehavior):
         """Get the LLM client, using custom client if provided, otherwise lazy-loading default."""
         if self._use_custom_client:
             return self._llm_client
-        return _get_llm_client()
+        return get_default_llm_client()
 
     def decide_speech(self, ctx: PlayerNodeContext) -> BehaviorResult:
         state = ctx.state
@@ -200,7 +198,15 @@ class WorkflowPlayerBehavior(PlayerBehavior):
             existing_player_mindset=existing_player_mindset,
         )
 
-        new_speech_text = generate_speech_fn(
+        metrics_collector.on_player_mindset_update(
+            game_id=ctx.state.get("game_id"),
+            round_number=ctx.state["current_round"],
+            phase=ctx.state["game_phase"],
+            player_id=ctx.player_id,
+            mindset=updated_mindset,
+        )
+
+        speech_text = generate_speech_fn(
             llm_client=self.llm_client,
             my_word=my_word,
             self_belief=updated_mindset.self_belief,
@@ -211,28 +217,21 @@ class WorkflowPlayerBehavior(PlayerBehavior):
             current_round=state["current_round"],
         )
 
-        metrics_collector.on_player_mindset_update(
-            game_id=state.get("game_id"),
-            round_number=state["current_round"],
-            phase=state["game_phase"],
-            player_id=player_id,
-            mindset=updated_mindset,
-        )
-        metrics_collector.on_speech(
-            game_id=state.get("game_id"),
-            round_number=state["current_round"],
-            player_id=player_id,
-            content=new_speech_text,
-        )
+        speech_lines = (speech_text or "").splitlines() or [""]
+        print("   Speech content:")
+        for line in speech_lines:
+            print(f"      {line}")
 
         speech_record: Speech = create_speech_record(
-            state=state,
+            state=ctx.state,
             player_id=player_id,
-            content=new_speech_text,
+            content=speech_text,
         )
 
         delta_private = self._create_player_private_state_delta(
-            updated_mindset, player_context, my_word
+            updated_mindset,
+            player_context,
+            my_word,
         )
 
         return {
@@ -252,9 +251,8 @@ class WorkflowPlayerBehavior(PlayerBehavior):
         player_context, my_word = self._get_player_context(state, player_id)
 
         print(
-            f"🗳️  PLAYER VOTE: {player_id} is deciding vote for round {state['current_round']}"
+            f"🗳️ PLAYER VOTE: {player_id} is voting in round {state['current_round']}"
         )
-        print(f"   Assigned word: {my_word}")
 
         config = get_config()
         private_state = player_context["private"]
@@ -275,33 +273,57 @@ class WorkflowPlayerBehavior(PlayerBehavior):
             existing_player_mindset=existing_player_mindset,
         )
 
-        voted_target = self._decide_player_vote(state, player_id, updated_mindset)
-
-        print(f"🗳️  PLAYER VOTE: {player_id} votes for: {voted_target}")
-        print(f"   Self belief: {updated_mindset.self_belief}")
-        print(f"   Suspicions: {updated_mindset.suspicions}")
-
-        ts = int(datetime.now().timestamp() * 1000)
-
-        metrics_collector.on_player_mindset_update(
-            game_id=state.get("game_id"),
-            round_number=state["current_round"],
-            phase=state["game_phase"],
-            player_id=player_id,
-            mindset=updated_mindset,
-        )
+        vote_target = self._decide_player_vote(state, player_id, updated_mindset)
 
         delta_private = self._create_player_private_state_delta(
-            updated_mindset, player_context, my_word
+            updated_mindset,
+            player_context,
+            my_word,
         )
-        new_vote = {
-            player_id: Vote(target=voted_target, ts=ts, phase_id=state["phase_id"])
-        }
+        vote_payload = Vote(
+            target=vote_target,
+            ts=int(datetime.utcnow().timestamp() * 1000),
+            phase_id=state["phase_id"],
+        )
+
+        self._record_vote_metrics(ctx, vote_target)
 
         return {
-            "current_votes": new_vote,
+            "current_votes": {player_id: vote_payload},
             "player_private_states": {player_id: delta_private},
         }
+
+    def _record_vote_metrics(
+        self,
+        ctx: PlayerNodeContext,
+        vote_target: str,
+    ) -> None:
+        metrics_collector.on_vote_cast(
+            game_id=ctx.state.get("game_id"),
+            round_number=ctx.state["current_round"],
+            voter_id=ctx.player_id,
+            vote_target=vote_target,
+        )
+
+    @staticmethod
+    def _decide_player_vote(
+        state: GameState,
+        player_id: str,
+        mindset: PlayerMindset,
+    ) -> str:
+        suspicions = mindset.suspicions
+        strongest_suspicion = max(
+            suspicions.items(),
+            key=lambda item: getattr(item[1], "confidence", 0),
+            default=None,
+        )
+
+        if strongest_suspicion:
+            suspect_player, suspicion = strongest_suspicion
+            if getattr(suspicion, "confidence", 0) > 0.6:
+                return suspect_player
+
+        return next_alive_player(state, starting_after=player_id)
 
     @staticmethod
     def _get_player_context(state: GameState, player_id: str):
@@ -330,40 +352,3 @@ class WorkflowPlayerBehavior(PlayerBehavior):
                 suspicions=merge_probs(existing_suspicions, updated_mindset.suspicions),
             ),
         )
-
-    @staticmethod
-    def _decide_player_vote(
-        state: GameState,
-        player_id: str,
-        updated_mindset: PlayerMindset,
-    ) -> str:
-        alive = alive_players(state)
-
-        my_self_belief = updated_mindset.self_belief
-        my_role = my_self_belief.role
-        if my_self_belief.confidence < 0.5:
-            my_role = "spy" if my_role == "civilian" else "civilian"
-
-        player_scores: Dict[str, float] = {}
-        for other_player_id in alive:
-            if other_player_id == player_id:
-                continue
-
-            score = 0.0
-            if other_player_id in updated_mindset.suspicions:
-                suspicion = updated_mindset.suspicions[other_player_id]
-                if my_role == suspicion.role:
-                    score = suspicion.confidence
-                else:
-                    score = -suspicion.confidence
-            player_scores[other_player_id] = score
-
-        if player_scores:
-            return min(player_scores, key=player_scores.get)
-
-        other_alive = [p for p in alive if p != player_id]
-        if other_alive:
-            return other_alive[0]
-        if alive:
-            return player_id
-        raise ValueError("No alive players to vote for.")

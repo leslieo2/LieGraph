@@ -23,9 +23,11 @@ Game Balancing:
 """
 
 import os
-from typing import List, Tuple
+from typing import Any, List, Mapping, Tuple
 
 import yaml
+
+VALID_BEHAVIOR_MODES = {"workflow", "agent"}
 
 
 class GameConfig:
@@ -109,11 +111,7 @@ class GameConfig:
     def behavior_mode(self) -> str:
         """Get the configured behavior mode (workflow or agent)."""
         mode = self._config["game"].get("behavior_mode", "workflow")
-        if mode not in {"workflow", "agent"}:
-            raise ValueError(
-                f"Unsupported behavior mode '{mode}'. Expected 'workflow' or 'agent'."
-            )
-        return mode
+        return _ensure_behavior_mode(mode)
 
     @property
     def vocabulary(self) -> List[Tuple[str, str]]:
@@ -191,6 +189,14 @@ class GameConfig:
 _config_instance: GameConfig = None
 
 
+def _ensure_behavior_mode(mode: str) -> str:
+    if mode not in VALID_BEHAVIOR_MODES:
+        raise ValueError(
+            f"Unsupported behavior mode '{mode}'. Expected one of {sorted(VALID_BEHAVIOR_MODES)}."
+        )
+    return mode
+
+
 def get_config(config_path: str = None) -> GameConfig:
     """
     Get the global configuration instance.
@@ -212,6 +218,39 @@ def get_config(config_path: str = None) -> GameConfig:
         _config_instance = GameConfig(config_path)
 
     return _config_instance
+
+
+def resolve_behavior_mode(
+    *,
+    state: Mapping[str, Any] | None = None,
+    override: str | None = None,
+    default: str | None = None,
+) -> str:
+    """
+    Resolve the behavior mode from overrides, state, or configuration defaults.
+
+    Preference order:
+    1. Explicit override argument
+    2. Mode stored on the provided state mapping
+    3. Provided default value
+    4. Configured default from config.yaml
+    """
+
+    if override is not None:
+        return _ensure_behavior_mode(override)
+
+    if state is not None:
+        mode = state.get("behavior_mode")
+        if isinstance(mode, str):
+            try:
+                return _ensure_behavior_mode(mode)
+            except ValueError:
+                pass
+
+    if default is not None:
+        return _ensure_behavior_mode(default)
+
+    return get_config().behavior_mode
 
 
 def reload_config(config_path: str = None) -> GameConfig:

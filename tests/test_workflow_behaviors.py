@@ -1,18 +1,19 @@
 """Tests for workflow-aligned behavior implementations."""
 
-from typing import Any
-from unittest.mock import Mock
-
 import pytest
+from typing import Any
+from unittest.mock import Mock, patch
 
-from src.game.agents.interfaces import PlayerNodeContext
-from src.game.agents.workflow_behaviors import WorkflowPlayerBehavior
+from src.game.modes.shared.interfaces import PlayerNodeContext
+from src.game.modes.workflow.behaviors import WorkflowPlayerBehavior
 from src.game.state import (
     PlayerMindset,
     PlayerPrivateState,
     SelfBelief,
     Suspicion,
 )
+
+pytestmark = pytest.mark.workflow
 
 
 @pytest.fixture
@@ -112,7 +113,8 @@ def test_workflow_behavior_decide_speech(player_behavior, base_state):
     generate_speech.assert_called_once()
 
 
-def test_workflow_behavior_decide_vote(player_behavior, base_state):
+@patch("src.game.modes.workflow.behaviors.metrics_collector.on_vote_cast", create=True)
+def test_workflow_behavior_decide_vote(mock_vote_metric, player_behavior, base_state):
     base_state = base_state | {
         "game_phase": "voting",
         "phase_id": "1:voting:test",

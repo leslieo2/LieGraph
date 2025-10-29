@@ -1,36 +1,51 @@
 from typing import Any, Dict
 
-from ..agents import HostNodeContext, get_host_behavior
+from ..config import resolve_behavior_mode
+from ..modes.agent import nodes as agent_nodes
+from ..modes.shared import HostNodeContext
+from ..modes.workflow import nodes as workflow_nodes
 from ..state import GameState
 
-_DEFAULT_BEHAVIOR_MODE = "workflow"
+_HOST_DELEGATES = {
+    "workflow": workflow_nodes,
+    "agent": agent_nodes,
+}
 
 
 def _behavior_mode_from_state(state: GameState) -> str:
-    """Read the behavior mode from state, defaulting to workflow."""
+    """Resolve the active behavior mode using configuration fallbacks."""
 
-    mode = state.get("behavior_mode")
-    if isinstance(mode, str) and mode:
-        return mode
-    return _DEFAULT_BEHAVIOR_MODE
+    return resolve_behavior_mode(state=state)
 
 
 def host_setup(state: GameState) -> Dict[str, Any]:
-    """Initializes the game by delegating to the configured host behavior."""
+    """Initialize the game by delegating to the mode-specific host implementation."""
 
-    behavior = get_host_behavior(mode=_behavior_mode_from_state(state))
-    return behavior.setup(HostNodeContext(state=state))
+    mode = _behavior_mode_from_state(state)
+    try:
+        delegate = _HOST_DELEGATES[mode]
+    except KeyError as exc:  # pragma: no cover - guardrail for future modes
+        raise ValueError(f"Unsupported behavior mode: {mode}") from exc
+    return delegate.host_setup(HostNodeContext(state=state))
 
 
 def host_stage_switch(state: GameState) -> Dict[str, Any]:
-    """Advances the stage by delegating to the configured host behavior."""
+    """Advance the stage by delegating to the mode-specific host implementation."""
 
-    behavior = get_host_behavior(mode=_behavior_mode_from_state(state))
-    return behavior.stage_switch(HostNodeContext(state=state))
+    mode = _behavior_mode_from_state(state)
+    try:
+        delegate = _HOST_DELEGATES[mode]
+    except KeyError as exc:  # pragma: no cover
+        raise ValueError(f"Unsupported behavior mode: {mode}") from exc
+    return delegate.host_stage_switch(HostNodeContext(state=state))
 
 
 def host_result(state: GameState) -> Dict[str, Any]:
-    """Resolves the current round by delegating to the configured host behavior."""
+    """Resolve the current round by delegating to the mode-specific host implementation."""
 
-    behavior = get_host_behavior(mode=_behavior_mode_from_state(state))
-    return behavior.resolve_round(HostNodeContext(state=state))
+    mode = _behavior_mode_from_state(state)
+    try:
+        delegate = _HOST_DELEGATES[mode]
+    except KeyError as exc:  # pragma: no cover
+        raise ValueError(f"Unsupported behavior mode: {mode}") from exc
+    return delegate.host_result(HostNodeContext(state=state))

@@ -5,12 +5,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.game.agents.agent_behavior import (
-    AgentPlayerBehavior,
-    AgentHostBehavior,
-    AgentToolbox,
-)
-from src.game.agents.interfaces import HostNodeContext, PlayerNodeContext
+pytestmark = pytest.mark.agent
+
+from src.game.modes.agent.behaviors import AgentPlayerBehavior, AgentHostBehavior
+from src.game.modes.agent.toolbox import AgentToolbox
+from src.game.modes.shared.interfaces import HostNodeContext, PlayerNodeContext
 from src.game.config import get_config
 from src.game.state import (
     GameState,

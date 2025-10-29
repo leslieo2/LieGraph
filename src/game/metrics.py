@@ -142,6 +142,7 @@ class GameMetrics:
                 "roles": dict(player_roles),
                 "mindset_records": [],
                 "speech_records": [],
+                "vote_records": [],
                 "winner": None,
             }
 
@@ -233,6 +234,45 @@ class GameMetrics:
                     total_tokens=total,
                     diversity=diversity,
                 )
+            )
+
+    def on_vote_cast(
+        self,
+        *,
+        game_id: str | None,
+        round_number: int,
+        voter_id: str,
+        vote_target: str | None,
+    ) -> None:
+        """
+        Record a single vote event for later analysis.
+
+        Args:
+            game_id: Identifier for the active game (optional when only one game runs).
+            round_number: The round during which the vote occurred.
+            voter_id: Player casting the vote.
+            vote_target: Player being voted for (may be None when abstaining).
+        """
+        with self._lock:
+            game_key = self._resolve_game_key(game_id)
+            if game_key is None:
+                return
+
+            game = self._active_games.get(game_key)
+            if not game:
+                return
+
+            roles = game.get("roles", {})
+            records: List[Dict[str, Any]] = game.setdefault("vote_records", [])
+
+            records.append(
+                {
+                    "round_number": round_number,
+                    "voter_id": voter_id,
+                    "vote_target": vote_target,
+                    "voter_role": roles.get(voter_id),
+                    "target_role": roles.get(vote_target) if vote_target else None,
+                }
             )
 
     def on_game_end(self, *, game_id: str | None, winner: str | None) -> None:
@@ -368,6 +408,7 @@ class GameMetrics:
             "self_accuracy_trend": self_trend,
             "suspicion_accuracy_trend": suspicion_trend,
             "speech_diversity": speech_summary,
+            "votes": list(game.get("vote_records", [])),
         }
 
     @staticmethod

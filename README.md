@@ -163,9 +163,10 @@ game:
 ### Agent Mode & Demo
 
 - Set `behavior_mode: agent` in `config.yaml` (or inject `{"behavior_mode": "agent"}` into the initial game state) to enable the agent memory/strategy layer.
+- When deriving the active mode in scripts, call `resolve_behavior_mode(state=state)` from `src.game.config` to honor overrides and defaults.
 - Run a quick terminal demo with strategy logs:
   ```bash
-  uv run python -m src.game.agents.play_demo --mode agent
+  uv run python -m src.game.modes.agent.play_demo --mode agent
   ```
   Use `--mode workflow` to compare the legacy deterministic flow.
 
@@ -208,9 +209,14 @@ LieGraph/
 │   ├── game/
 │   │   ├── graph.py          # Main LangGraph workflow
 │   │   ├── state.py          # Game state definitions
-│   │   ├── nodes/            # Graph node implementations
-│   │   ├── rules.py          # Game logic and win conditions
-│   │   └── llm_strategy.py   # AI reasoning and speech generation
+│   │   ├── modes/            # Mode-specific behaviors, nodes, and toolboxes
+│   │   │   ├── shared/       # Interfaces and behavior registry helpers
+│   │   │   ├── workflow/     # Workflow behaviors and node delegates
+│   │   │   └── agent/        # Agent behaviors, memory, and tooling
+│   │   ├── nodes/            # Mode-aware adapters that call into modes/*
+│   │   └── rules.py          # Game logic and win conditions
+│   ├── tools/
+│   │   └── llm/              # LLM client helpers plus inference & speech modules
 ├── tests/                    # Pytest test suite
 ├── ui-web/frontend/          # React web interface
 └── config.yaml               # Game configuration
@@ -223,6 +229,9 @@ For detailed architecture information, component design, and integration pattern
 ### Running Tests
 ```bash
 python -m pytest tests/ -v
+# Mode-specific suites
+python -m pytest -m workflow
+python -m pytest -m agent
 ```
 
 ## 🗺️ Roadmap
