@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Any, Dict, Optional, cast
 
 from ...config import get_config
-from src.tools.llm import get_default_llm_client
 from src.tools.llm.inference import llm_update_player_mindset
 from src.tools.llm.speech import llm_generate_speech
 from ...metrics import metrics_collector
@@ -160,7 +159,10 @@ class WorkflowPlayerBehavior(PlayerBehavior):
         """Get the LLM client, using custom client if provided, otherwise lazy-loading default."""
         if self._use_custom_client:
             return self._llm_client
-        return get_default_llm_client()
+        # Import within the property so test patches targeting src.tools.llm work reliably.
+        from src.tools import llm as llm_module
+
+        return llm_module.get_default_llm_client()
 
     def decide_speech(self, ctx: PlayerNodeContext) -> BehaviorResult:
         state = ctx.state
