@@ -4,7 +4,7 @@ Game module containing the core game logic.
 
 from . import nodes
 from . import state
-from .llm_strategy import llm_update_player_mindset, llm_generate_speech
+from .strategy import llm_update_player_mindset, llm_generate_speech
 from . import rules
 from . import graph
 from . import config

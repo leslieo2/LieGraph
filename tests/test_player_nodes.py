@@ -109,7 +109,10 @@ def test_player_speech(
 
 @patch("src.game.nodes.player._get_llm_client")
 @patch("src.game.nodes.player.llm_update_player_mindset")
-def test_player_vote(mock_infer, mock_get_llm, player_id, base_player_state: GameState):
+@patch("langchain.agents.create_agent")
+def test_player_vote(
+    mock_create_agent, mock_infer, mock_get_llm, player_id, base_player_state: GameState
+):
     """Tests the player_vote node with mocked LLM calls."""
     # Arrange: Configure mocks
     mock_llm_client = MagicMock()
@@ -119,6 +122,19 @@ def test_player_vote(mock_infer, mock_get_llm, player_id, base_player_state: Gam
         self_belief=SelfBelief(role="civilian", confidence=0.9),
         suspicions={"c": Suspicion(role="spy", confidence=0.8, reason="very vague")},
     )
+
+    # Mock the agent to return a vote for "c"
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    mock_agent = MagicMock()
+    mock_agent.invoke.return_value = {
+        "messages": [
+            HumanMessage(content="test context"),
+            AIMessage(content="I vote for c"),
+        ]
+    }
+    mock_create_agent.return_value = mock_agent
+
     voting_state = base_player_state | {
         "game_phase": "voting",
         "phase_id": "1:voting:mock_uuid",
@@ -138,6 +154,7 @@ def test_player_vote(mock_infer, mock_get_llm, player_id, base_player_state: Gam
     assert private_update.playerMindset.self_belief.role == "civilian"
 
     # Verify mocks
+    # LLM client is called once for the agent
     mock_get_llm.assert_called_once()
     mock_infer.assert_called_once()
 

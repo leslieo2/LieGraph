@@ -1,11 +1,13 @@
 from unittest.mock import MagicMock, patch
 
-from src.game.llm_strategy import (
-    llm_update_player_mindset,
+from src.game.strategy import llm_update_player_mindset
+from src.game.strategy.prompt_builder import (
     _INFERENCE_PROMPT_PREFIX,
-    _build_inference_user_context,
-    _build_speech_user_context,
-    _format_speech_system_prompt,
+    format_speech_system_prompt as _format_speech_system_prompt,
+)
+from src.game.strategy.context_builder import (
+    build_inference_user_context as _build_inference_user_context,
+    build_speech_user_context as _build_speech_user_context,
 )
 
 # Sample data for testing
@@ -149,7 +151,7 @@ def test_build_speech_prompt_zh():
     assert '<speech seq="0" player="b">It&#x27;s a type of fruit.</speech>' in prompt
 
 
-@patch("src.game.llm_strategy.create_extractor")
+@patch("src.game.strategy.strategy_core.create_extractor")
 def test_llm_update_player_mindset_success(mock_create_extractor):
     """Tests successful belief inference with trustcall."""
     mock_extractor = MagicMock()
@@ -176,7 +178,7 @@ def test_llm_update_player_mindset_success(mock_create_extractor):
     mock_extractor.invoke.assert_called_once()
 
 
-@patch("src.game.llm_strategy.create_extractor")
+@patch("src.game.strategy.strategy_core.create_extractor")
 def test_llm_update_player_mindset_failure(mock_create_extractor):
     """Tests fallback behavior when trustcall extraction fails for inference."""
     mock_extractor = MagicMock()
