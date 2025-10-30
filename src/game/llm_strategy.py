@@ -28,17 +28,13 @@ from html import escape
 from typing import List, Dict, Any, Sequence
 
 from langchain_core.messages import HumanMessage, SystemMessage
-
 from trustcall import create_extractor
 
-from src.game.state import GameState, Speech, PlayerMindset, Suspicion, SelfBelief
-from src.tools.llm import create_llm
+from src.game.state import Speech, PlayerMindset, Suspicion, SelfBelief
+
 
 # Game rules are now managed by the configuration system
 # Use config.get_game_rules() to get game rules
-
-# --- LLM Clients ---
-llm_client = create_llm()
 
 
 # --- Helper Functions ---

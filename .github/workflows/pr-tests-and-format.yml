@@ -1,0 +1,26 @@
+name: PR Tests and Formatting
+
+on:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          python-version: "3.12"
+          cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Check formatting with Black
+        run: uv run black . --check
+
+      - name: Run pytest
+        run: uv run pytest
