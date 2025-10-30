@@ -80,7 +80,7 @@ def test_player_speech(
     # Arrange: Configure mocks to return predictable values
     mock_llm_client = MagicMock()
     mock_get_llm.return_value = mock_llm_client
-    
+
     mock_infer.return_value = PlayerMindset(
         self_belief=SelfBelief(role="civilian", confidence=0.9),
         suspicions={"c": Suspicion(role="spy", confidence=0.7, reason="vague")},
@@ -114,7 +114,7 @@ def test_player_vote(mock_infer, mock_get_llm, player_id, base_player_state: Gam
     # Arrange: Configure mocks
     mock_llm_client = MagicMock()
     mock_get_llm.return_value = mock_llm_client
-    
+
     mock_infer.return_value = PlayerMindset(
         self_belief=SelfBelief(role="civilian", confidence=0.9),
         suspicions={"c": Suspicion(role="spy", confidence=0.8, reason="very vague")},
