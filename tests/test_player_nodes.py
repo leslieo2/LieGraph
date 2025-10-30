@@ -70,13 +70,17 @@ def base_player_state(player_id):
     }
 
 
+@patch("src.game.nodes.player._get_llm_client")
 @patch("src.game.nodes.player.llm_generate_speech")
 @patch("src.game.nodes.player.llm_update_player_mindset")
 def test_player_speech(
-    mock_infer, mock_speech, player_id, base_player_state: GameState
+    mock_infer, mock_speech, mock_get_llm, player_id, base_player_state: GameState
 ):
     """Tests the player_speech node with mocked LLM calls."""
     # Arrange: Configure mocks to return predictable values
+    mock_llm_client = MagicMock()
+    mock_get_llm.return_value = mock_llm_client
+    
     mock_infer.return_value = PlayerMindset(
         self_belief=SelfBelief(role="civilian", confidence=0.9),
         suspicions={"c": Suspicion(role="spy", confidence=0.7, reason="vague")},
@@ -98,14 +102,19 @@ def test_player_speech(
     assert private_update.playerMindset.suspicions["c"].role == "spy"
 
     # Verify mocks were called correctly
+    mock_get_llm.assert_called_once()
     mock_infer.assert_called_once()
     mock_speech.assert_called_once()
 
 
+@patch("src.game.nodes.player._get_llm_client")
 @patch("src.game.nodes.player.llm_update_player_mindset")
-def test_player_vote(mock_infer, player_id, base_player_state: GameState):
+def test_player_vote(mock_infer, mock_get_llm, player_id, base_player_state: GameState):
     """Tests the player_vote node with mocked LLM calls."""
     # Arrange: Configure mocks
+    mock_llm_client = MagicMock()
+    mock_get_llm.return_value = mock_llm_client
+    
     mock_infer.return_value = PlayerMindset(
         self_belief=SelfBelief(role="civilian", confidence=0.9),
         suspicions={"c": Suspicion(role="spy", confidence=0.8, reason="very vague")},
@@ -129,6 +138,7 @@ def test_player_vote(mock_infer, player_id, base_player_state: GameState):
     assert private_update.playerMindset.self_belief.role == "civilian"
 
     # Verify mocks
+    mock_get_llm.assert_called_once()
     mock_infer.assert_called_once()
 
 
