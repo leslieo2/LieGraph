@@ -151,39 +151,35 @@ def test_build_speech_prompt_zh():
     assert '<speech seq="0" player="b">It&#x27;s a type of fruit.</speech>' in prompt
 
 
-@patch("src.game.strategy.strategy_core.create_extractor")
-def test_llm_update_player_mindset_success(mock_create_extractor):
-    """Tests successful belief inference with trustcall."""
-    mock_extractor = MagicMock()
-    mock_extractor.invoke.return_value = {
-        "responses": [
-            PlayerMindset(
-                self_belief=SelfBelief(role="civilian", confidence=0.9),
-                suspicions={
-                    "b": Suspicion(
-                        role="spy", confidence=0.7, reason="Suspicious speech"
-                    )
-                },
-            )
-        ]
+@patch("src.game.strategy.strategy_core.create_agent")
+def test_llm_update_player_mindset_success(mock_create_agent):
+    """Tests successful belief inference with structured output."""
+    mock_agent = MagicMock()
+    mock_agent.invoke.return_value = {
+        "structured_response": PlayerMindset(
+            self_belief=SelfBelief(role="civilian", confidence=0.9),
+            suspicions={
+                "b": Suspicion(role="spy", confidence=0.7, reason="Suspicious speech")
+            },
+        )
     }
-    mock_create_extractor.return_value = mock_extractor
+    mock_create_agent.return_value = mock_agent
 
     test_state = mock_state_inference_en.copy()
     result = llm_update_player_mindset(llm_client=MagicMock(), **test_state)
 
     assert result.self_belief.role == "civilian"
     assert result.suspicions["b"].reason == "Suspicious speech"
-    mock_create_extractor.assert_called_once()
-    mock_extractor.invoke.assert_called_once()
+    mock_create_agent.assert_called_once()
+    mock_agent.invoke.assert_called_once()
 
 
-@patch("src.game.strategy.strategy_core.create_extractor")
-def test_llm_update_player_mindset_failure(mock_create_extractor):
-    """Tests fallback behavior when trustcall extraction fails for inference."""
-    mock_extractor = MagicMock()
-    mock_extractor.invoke.return_value = {"responses": []}
-    mock_create_extractor.return_value = mock_extractor
+@patch("src.game.strategy.strategy_core.create_agent")
+def test_llm_update_player_mindset_failure(mock_create_agent):
+    """Tests fallback behavior when structured output extraction fails for inference."""
+    mock_agent = MagicMock()
+    mock_agent.invoke.return_value = {"structured_response": None}
+    mock_create_agent.return_value = mock_agent
 
     test_state = mock_state_inference_en.copy()
     result = llm_update_player_mindset(llm_client=MagicMock(), **test_state)

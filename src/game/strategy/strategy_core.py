@@ -8,7 +8,8 @@ for player mindset updates and speech generation.
 from typing import Any, List, Dict, Sequence
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from trustcall import create_extractor
+from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
 
 from src.game.state import Speech, PlayerMindset, SelfBelief
 from src.game.strategy.logging_utils import log_self_belief_update
@@ -63,15 +64,26 @@ def llm_update_player_mindset(
         completed_speeches, players, alive, me, existing_player_mindset
     )
 
-    extractor = create_extractor(
-        llm_client, tools=[PlayerMindset], tool_choice="PlayerMindset"
-    )
-    result = extractor.invoke(
-        {"messages": [("system", system_prompt), ("user", user_context)]}
+    # Create agent with structured output using ToolStrategy
+    agent = create_agent(
+        model=llm_client,
+        tools=[],  # No additional tools needed for structured output
+        response_format=ToolStrategy(PlayerMindset),
     )
 
-    if result["responses"]:
-        new_mindset = result["responses"][0]
+    # Invoke the agent with the prompts
+    result = agent.invoke(
+        {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_context},
+            ]
+        }
+    )
+
+    # Extract structured response from result
+    if result.get("structured_response"):
+        new_mindset = result["structured_response"]
         log_self_belief_update(me, existing_self_belief, new_mindset.self_belief)
         return new_mindset
 

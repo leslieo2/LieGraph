@@ -3,7 +3,7 @@
 
 game:
   # Number of players in the game (minimum 3)
-  player_count: 6
+  player_count: 3
 
   # Vocabulary pairs for the game
   # Each pair contains (civilian_word, spy_word)
