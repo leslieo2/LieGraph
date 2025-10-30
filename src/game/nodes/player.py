@@ -27,9 +27,9 @@ from ..config import get_config
 from ..llm_strategy import (
     llm_update_player_mindset,
     llm_generate_speech,
-    llm_client,  # Use the real LLM client
 )
 from ..metrics import metrics_collector
+from src.tools.llm import create_llm
 from ..state import (
     GameState,
     alive_players,
@@ -42,7 +42,14 @@ from ..state import (
     merge_probs,
 )
 
-_llm_client = llm_client
+
+def _get_llm_client():
+    """Create and return an LLM client instance.
+
+    This function provides lazy initialization of the LLM client,
+    creating it only when needed and allowing for runtime configuration.
+    """
+    return create_llm()
 
 
 def _get_player_context(state: GameState, player_id: str):
@@ -104,8 +111,9 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     private_state = cur_player_context["private"]
     existing_player_mindset = private_state.playerMindset
 
+    llm_client = _get_llm_client()
     updated_mindset = llm_update_player_mindset(
-        llm_client=_llm_client,
+        llm_client=llm_client,
         my_word=my_word,
         completed_speeches=state["completed_speeches"],
         players=state["players"],
@@ -117,7 +125,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
 
     # Generate speech using LLM
     new_speech_text = llm_generate_speech(
-        llm_client=_llm_client,
+        llm_client=llm_client,
         my_word=my_word,
         self_belief=updated_mindset.self_belief,
         suspicions=updated_mindset.suspicions,
@@ -236,8 +244,9 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     private_state = cur_player_context["private"]
     existing_player_mindset = private_state.playerMindset
 
+    llm_client = _get_llm_client()
     updated_mindset = llm_update_player_mindset(
-        llm_client=_llm_client,
+        llm_client=llm_client,
         my_word=my_word,
         completed_speeches=state["completed_speeches"],
         players=state["players"],
