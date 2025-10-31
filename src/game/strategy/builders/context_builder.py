@@ -182,3 +182,60 @@ def build_speech_user_context(
         "<response_guidance>Return exactly one line of speech; avoid emojis, labels, or extra commentary.</response_guidance>"
         "</speech_context>"
     )
+
+
+def build_vote_user_context(
+    alive: List[str],
+    me: str,
+    current_mindset: PlayerMindset,
+    current_round: int,
+) -> str:
+    """Build the minimal context required for picking a voting strategy."""
+    mindset_dict = _as_mapping(current_mindset)
+    suspicions = mindset_dict.get("suspicions", {}) or {}
+
+    alive_tags = (
+        "".join(f'<player id="{escape(pid)}" />' for pid in alive if pid != me)
+        or "<none />"
+    )
+
+    suspicion_tags = []
+    for pid, suspicion in suspicions.items():
+        if pid == me:
+            continue
+        suspicion_dict = _as_mapping(suspicion)
+        suspicion_role = suspicion_dict.get("role", "civilian")
+        suspicion_conf = _as_float(suspicion_dict.get("confidence", 0.0))
+        trimmed_reason = trim_text_for_prompt(
+            suspicion_dict.get("reason", ""), limit=120
+        )
+        suspicion_tags.append(
+            (
+                f'<suspect id="{escape(pid)}" '
+                f'role="{escape(suspicion_role)}" '
+                f'confidence="{suspicion_conf:.2f}">'
+                f"{escape(trimmed_reason)}"
+                "</suspect>"
+            )
+        )
+
+    suspicions_block = "".join(suspicion_tags) or "<none />"
+
+    guidance_text = (
+        f"It is currently round {current_round}. "
+        "During rounds 1 or 2, you may prefer the slightly conservative strategy "
+        "(decide_player_vote_second_best) to stay flexible and harder to read. "
+        "If you feel one player clearly stands out as more suspicious, or the game has moved into later rounds, "
+        "choose decide_player_vote for a direct accusation. "
+        "Call exactly one tool, then return the final target via the VoteDecision structured response."
+    )
+
+    return (
+        "<vote_context>"
+        f'<me id="{escape(me)}" />'
+        f'<round index="{current_round}" />'
+        f"<alive>{alive_tags}</alive>"
+        f"<suspicions>{suspicions_block}</suspicions>"
+        f"<guidance>{escape(guidance_text)}</guidance>"
+        "</vote_context>"
+    )

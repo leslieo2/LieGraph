@@ -95,6 +95,14 @@ Guide:
 - Avoid brands, numbers, and rare trivia unless essential.
 Reply now with your single-line speech."""
 
+_VOTE_PROMPT_PREFIX = """You are playing "Who is the Spy" and it is time to vote.
+Your secret word is "{my_word}".
+Decide between two voting strategies, and call exactly one tool:
+- `decide_player_vote`: Use when one player feels clearly more suspicious or the game is already in later rounds.
+- `decide_player_vote_second_best`: Use when suspicions are close together, you are still in the first two rounds, or you want to stay less predictable.
+Do not call both tools. Make your internal choice, invoke the tool, then return only the player ID via the VoteDecision structured response.
+(Alive players: {alive_count}, current round: {current_round})"""
+
 
 def determine_clarity(
     role: str, self_confidence: float, current_round: int
@@ -148,4 +156,13 @@ def format_inference_system_prompt(
     """Format the inference system prompt with game parameters."""
     return _INFERENCE_PROMPT_PREFIX.format(
         my_word=my_word, player_count=player_count, spy_count=spy_count
+    )
+
+
+def format_vote_system_prompt(
+    my_word: str, alive_count: int, current_round: int
+) -> str:
+    """Format system prompt for voting decisions."""
+    return _VOTE_PROMPT_PREFIX.format(
+        my_word=my_word, alive_count=alive_count, current_round=current_round
     )
