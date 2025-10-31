@@ -24,6 +24,7 @@ from typing import Any, Dict, Iterable, List, Optional, cast
 import json
 import re
 import sys
+from argparse import ArgumentParser
 from pathlib import Path
 from threading import Lock
 
@@ -613,6 +614,40 @@ class GameMetrics:
         with path.open("w", encoding="utf-8") as fp:
             json.dump(payload, fp, ensure_ascii=False, indent=2)
 
+    # ------------------------------------------------------------------ #
+    # Historical aggregation helpers
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    def aggregate_from_summaries(
+        cls, summaries: Iterable[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Produce aggregate metrics from previously persisted game summaries.
+
+        Args:
+            summaries: Iterable of game summaries (as produced by _summarize_game).
+
+        Returns:
+            Dict containing ``metrics`` and ``quality_score`` blocks matching the
+            structure of ``logs/metrics/overall.json``.
+        """
+        instance = cls()
+        instance.reset()
+
+        with instance._lock:
+            instance.completed_games = list(summaries)
+            win_counts = Counter()
+            for summary in instance.completed_games:
+                winner = summary.get("winner")
+                if winner:
+                    win_counts[winner] += 1
+            instance.win_counts = win_counts
+
+        metrics = instance.get_overall_metrics()
+        quality_score = instance._compute_functional_score(metrics)
+        return {"metrics": metrics, "quality_score": quality_score}
+
 
 # Global collector used by the rest of the codebase.
 metrics_collector = GameMetrics()
@@ -718,8 +753,128 @@ def run_multilingual_metrics_batch(
     return {"metrics": overall_metrics, "quality_score": quality_score}
 
 
+def load_saved_game_summaries(
+    metrics_dir: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Load all persisted game summaries from ``logs/metrics`` style directories.
+
+    Args:
+        metrics_dir: Optional override directory. Defaults to the repository's
+            ``logs/metrics`` folder.
+
+    Returns:
+        List of summary dictionaries extracted from ``<game_id>.json`` files.
+        Files whose name starts with ``overall`` are ignored.
+    """
+    metrics_dir = metrics_dir or (BASE_DIR / "logs" / "metrics")
+    if not metrics_dir.exists():
+        return []
+
+    summaries: List[Dict[str, Any]] = []
+    for path in sorted(metrics_dir.glob("*.json")):
+        if path.name.startswith("overall"):
+            continue
+        try:
+            with path.open("r", encoding="utf-8") as fp:
+                data = json.load(fp)
+        except (OSError, json.JSONDecodeError):
+            continue
+        summary = data.get("summary")
+        if isinstance(summary, dict):
+            summaries.append(summary)
+
+    return summaries
+
+
+def aggregate_saved_metrics(
+    *,
+    metrics_dir: Optional[Path] = None,
+    output_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """
+    Aggregate metrics from previously saved game summary files.
+
+    Args:
+        metrics_dir: Optional directory to search. Defaults to ``logs/metrics``.
+        output_path: Optional path to write the aggregated payload. When omitted,
+            the result is returned without writing to disk.
+
+    Returns:
+        Aggregated payload containing ``metrics`` and ``quality_score`` blocks.
+    """
+    summaries = load_saved_game_summaries(metrics_dir)
+    result = GameMetrics.aggregate_from_summaries(summaries)
+
+    if output_path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as fp:
+            json.dump(result, fp, ensure_ascii=False, indent=2)
+
+    return result
+
+
+def _parse_args():
+    parser = ArgumentParser(
+        description="Metrics utilities for LieGraph. Defaults to running a multilingual batch."
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    batch_parser = subparsers.add_parser(
+        "batch", help="Run the built-in multilingual benchmark (default)."
+    )
+    batch_parser.add_argument(
+        "--sequential",
+        dest="concurrent",
+        action="store_false",
+        help="Run games sequentially instead of concurrently.",
+    )
+    batch_parser.set_defaults(concurrent=True)
+
+    history_parser = subparsers.add_parser(
+        "history",
+        help="Aggregate metrics across previously persisted game summaries.",
+    )
+    history_parser.add_argument(
+        "--metrics-dir",
+        type=str,
+        default=None,
+        help="Directory containing per-game summary JSON files (default: logs/metrics).",
+    )
+    history_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Optional path to write the aggregated payload (JSON).",
+    )
+
+    parser.set_defaults(command="batch", concurrent=True)
+    return parser.parse_args()
+
+
+def main():
+    args = _parse_args()
+
+    if args.command == "history":
+        metrics_dir = Path(args.metrics_dir).expanduser() if args.metrics_dir else None
+        output_path = Path(args.output).expanduser() if args.output else None
+        result = aggregate_saved_metrics(
+            metrics_dir=metrics_dir,
+            output_path=output_path,
+        )
+        print("\nAggregated historical metrics:")
+        print(json.dumps(result["metrics"], ensure_ascii=False, indent=2))
+        print("\nQuality score:")
+        print(json.dumps(result["quality_score"], ensure_ascii=False, indent=2))
+        return result
+
+    # Default: run multilingual batch
+    result = run_multilingual_metrics_batch(concurrent=args.concurrent)
+    return result
+
+
 if __name__ == "__main__":
-    run_multilingual_metrics_batch(concurrent=True)
+    main()
 
 
 __all__ = [
@@ -727,4 +882,7 @@ __all__ = [
     "metrics_collector",
     "MULTILINGUAL_VOCABULARY_BATCH",
     "run_multilingual_metrics_batch",
+    "load_saved_game_summaries",
+    "aggregate_saved_metrics",
+    "main",
 ]
