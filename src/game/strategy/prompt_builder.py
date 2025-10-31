@@ -4,6 +4,8 @@ Prompt engineering for LLM-powered game strategies.
 Manages all prompt templates and role-specific strategy determination.
 """
 
+from typing import Any, Dict, cast
+
 from src.game.state import SelfBelief
 
 
@@ -123,7 +125,17 @@ def determine_clarity(
 
 def format_speech_system_prompt(my_word: str, self_belief: SelfBelief) -> str:
     """Select the civilian or spy speech prompt based on calibrated confidence."""
-    is_confident_spy = self_belief.role == "spy" and self_belief.confidence >= 0.7
+    if hasattr(self_belief, "model_dump"):
+        belief_dict = cast(Dict[str, Any], self_belief.model_dump())
+    elif isinstance(self_belief, dict):
+        belief_dict = self_belief
+    else:
+        belief_dict = cast(Dict[str, Any], dict(self_belief))
+
+    is_confident_spy = (
+        belief_dict.get("role") == "spy"
+        and float(belief_dict.get("confidence", 0.0)) >= 0.7
+    )
     if is_confident_spy:
         template = _SPY_SPEECH_PROMPT_PREFIX
     else:

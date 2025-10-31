@@ -29,7 +29,10 @@ def host_setup(state: GameState) -> Dict[str, Any]:
     print(f"🎮 Host: Initializing game, {len(player_list)} players")
     print(f"   Players: {player_list}")
     for player_id, private_state in assignments["player_private_states"].items():
-        print(f"   Player {player_id}: Assigned word = {private_state.assigned_word}")
+        assigned_word = getattr(private_state, "assigned_word", None)
+        if assigned_word is None and isinstance(private_state, dict):
+            assigned_word = private_state.get("assigned_word")
+        print(f"   Player {player_id}: Assigned word = {assigned_word}")
 
     metrics_collector.on_game_start(
         game_id=state.get("game_id"),

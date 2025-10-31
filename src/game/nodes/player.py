@@ -21,7 +21,7 @@ Integration Points:
 """
 
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, cast
 
 from src.tools.llm import create_llm
 from ..config import get_config
@@ -52,15 +52,36 @@ def _get_llm_client():
     return create_llm()
 
 
+def _normalize_mindset(mindset: Any) -> PlayerMindset:
+    """Convert mindset objects (Pydantic or dict) into plain dict form."""
+    if mindset is None:
+        return {
+            "self_belief": {"role": "civilian", "confidence": 0.5},
+            "suspicions": {},
+        }
+
+    if hasattr(mindset, "model_dump"):
+        return cast(PlayerMindset, mindset.model_dump())
+
+    if isinstance(mindset, dict):
+        return cast(PlayerMindset, mindset)
+
+    return cast(PlayerMindset, dict(mindset))
+
+
 def _get_player_context(state: GameState, player_id: str):
     """
     Retrieves player-specific context needed for LLM interactions,
     including their private player_context, assigned word
     """
     player_context = get_player_context(state, player_id)
-    private_state = player_context["private"]
-    my_word = private_state.assigned_word
-    return player_context, my_word
+    private_state = player_context.get("private") or {}
+    assigned_word = getattr(private_state, "assigned_word", None)
+    if assigned_word is None and isinstance(private_state, dict):
+        assigned_word = private_state.get("assigned_word")
+    if assigned_word is None:
+        assigned_word = ""
+    return player_context, assigned_word
 
 
 def _create_player_private_state_delta(
@@ -72,18 +93,27 @@ def _create_player_private_state_delta(
     Creates a PlayerPrivateState object with proper type validation, preserving assigned_word
     and merging suspicions from the player's current mindset with the updated mindset.
     """
-    private_state = player_context["private"]
-    existing_suspicions = (
-        private_state.playerMindset.suspicions if private_state.playerMindset else {}
+    private_state = player_context.get("private") or {}
+
+    if hasattr(private_state, "playerMindset"):
+        existing_player_mindset = private_state.playerMindset
+    else:
+        existing_player_mindset = private_state.get("playerMindset")
+
+    existing_state = _normalize_mindset(existing_player_mindset)
+    mindset_state = _normalize_mindset(updated_mindset)
+
+    new_suspicions = merge_probs(
+        existing_state.get("suspicions", {}), mindset_state.get("suspicions", {})
     )
 
-    return PlayerPrivateState(
-        assigned_word=my_word,
-        playerMindset=PlayerMindset(
-            self_belief=updated_mindset.self_belief,
-            suspicions=merge_probs(existing_suspicions, updated_mindset.suspicions),
-        ),
-    )
+    return {
+        "assigned_word": my_word,
+        "playerMindset": {
+            "self_belief": mindset_state.get("self_belief", {}),
+            "suspicions": new_suspicions,
+        },
+    }
 
 
 def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
@@ -108,8 +138,13 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
 
     # Generate playerMindset using LLM
     config = get_config()
-    private_state = cur_player_context["private"]
-    existing_player_mindset = private_state.playerMindset
+    private_state = cur_player_context.get("private") or {}
+    if hasattr(private_state, "playerMindset"):
+        existing_player_mindset = private_state.playerMindset
+    else:
+        existing_player_mindset = private_state.get("playerMindset")
+
+    existing_player_mindset = _normalize_mindset(existing_player_mindset)
 
     llm_client = _get_llm_client()
     updated_mindset = llm_update_player_mindset(
@@ -123,12 +158,14 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
         existing_player_mindset=existing_player_mindset,
     )
 
+    updated_mindset_state = _normalize_mindset(updated_mindset)
+
     # Generate speech using LLM
     new_speech_text = llm_generate_speech(
         llm_client=llm_client,
         my_word=my_word,
-        self_belief=updated_mindset.self_belief,
-        suspicions=updated_mindset.suspicions,
+        self_belief=updated_mindset_state.get("self_belief", {}),
+        suspicions=updated_mindset_state.get("suspicions", {}),
         completed_speeches=state["completed_speeches"],
         me=player_id,
         alive=alive_players(state),
@@ -136,8 +173,8 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     )
 
     print(f'🎤 PLAYER SPEECH: {player_id} says: "{new_speech_text}"')
-    print(f"   Self belief: {updated_mindset.self_belief}")
-    print(f"   Suspicions: {updated_mindset.suspicions}")
+    print(f"   Self belief: {updated_mindset_state.get('self_belief')}")
+    print(f"   Suspicions: {updated_mindset_state.get('suspicions')}")
 
     # Prepare the state updates based on the generated speech and PlayerMindset
     speech_record: Speech = create_speech_record(state, player_id, new_speech_text)
@@ -147,7 +184,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
         round_number=state["current_round"],
         phase=state["game_phase"],
         player_id=player_id,
-        mindset=updated_mindset,
+        mindset=updated_mindset_state,
     )
     metrics_collector.on_speech(
         game_id=state.get("game_id"),
@@ -157,7 +194,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     )
 
     delta_private = _create_player_private_state_delta(
-        updated_mindset, cur_player_context, my_word
+        updated_mindset_state, cur_player_context, my_word
     )
 
     return {
@@ -178,29 +215,40 @@ def _decide_player_vote(
     3. Vote for player with the highest score
     """
 
+    mindset_state = _normalize_mindset(updated_mindset)
     alive = alive_players(state)
 
     # Determine own role: if confidence > 50%, use current role, otherwise use opposite
-    my_self_belief = updated_mindset.self_belief
-    my_role = my_self_belief.role
-    if my_self_belief.confidence < 0.5:
+    my_self_belief = mindset_state.get("self_belief", {})
+    my_role = my_self_belief.get("role", "civilian")
+    if my_self_belief.get("confidence", 0.0) < 0.5:
         # Use opposite role
         my_role = "spy" if my_role == "civilian" else "civilian"
 
+    suspicions = mindset_state.get("suspicions", {}) or {}
     player_scores: Dict[str, float] = {}
     for other_player_id in alive:
         if other_player_id == player_id:
             continue
 
         score = 0.0
-        if other_player_id in updated_mindset.suspicions:
-            suspicion = updated_mindset.suspicions[other_player_id]
-            if my_role == suspicion.role:
+        suspicion = suspicions.get(other_player_id)
+        if suspicion:
+            if hasattr(suspicion, "model_dump"):
+                suspicion_data = suspicion.model_dump()
+            elif isinstance(suspicion, dict):
+                suspicion_data = suspicion
+            else:
+                suspicion_data = dict(suspicion)
+
+            suspicion_role = suspicion_data.get("role", "civilian")
+            suspicion_conf = suspicion_data.get("confidence", 0.0)
+            if my_role == suspicion_role:
                 # Positive score means we trust them (same role alignment)
-                score = suspicion.confidence
+                score = suspicion_conf
             else:
                 # Negative score means we distrust them (different role alignment)
-                score = -suspicion.confidence
+                score = -suspicion_conf
         player_scores[other_player_id] = score
 
     if player_scores:
@@ -241,8 +289,13 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
 
     # Generate playerMindset using LLM
     config = get_config()
-    private_state = cur_player_context["private"]
-    existing_player_mindset = private_state.playerMindset
+    private_state = cur_player_context.get("private") or {}
+    if hasattr(private_state, "playerMindset"):
+        existing_player_mindset = private_state.playerMindset
+    else:
+        existing_player_mindset = private_state.get("playerMindset")
+
+    existing_player_mindset = _normalize_mindset(existing_player_mindset)
 
     llm_client = _get_llm_client()
     updated_mindset = llm_update_player_mindset(
@@ -255,12 +308,13 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
         rules=config.get_game_rules(),
         existing_player_mindset=existing_player_mindset,
     )
+    updated_mindset_state = _normalize_mindset(updated_mindset)
     # Decide the player's vote and infer PlayerMindset using LLM
-    voted_target = _decide_player_vote(state, player_id, updated_mindset)
+    voted_target = _decide_player_vote(state, player_id, updated_mindset_state)
 
     print(f"🗳️  PLAYER VOTE: {player_id} votes for: {voted_target}")
-    print(f"   Self belief: {updated_mindset.self_belief}")
-    print(f"   Suspicions: {updated_mindset.suspicions}")
+    print(f"   Self belief: {updated_mindset_state.get('self_belief')}")
+    print(f"   Suspicions: {updated_mindset_state.get('suspicions')}")
 
     # Prepare the state updates based on the decided vote and PlayerMindset
     ts = int(datetime.now().timestamp() * 1000)
@@ -270,13 +324,19 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
         round_number=state["current_round"],
         phase=state["game_phase"],
         player_id=player_id,
-        mindset=updated_mindset,
+        mindset=updated_mindset_state,
     )
 
     delta_private = _create_player_private_state_delta(
-        updated_mindset, cur_player_context, my_word
+        updated_mindset_state, cur_player_context, my_word
     )
-    new_vote = {player_id: Vote(target=voted_target, ts=ts, phase_id=state["phase_id"])}
+    new_vote = {
+        player_id: {
+            "target": voted_target,
+            "ts": ts,
+            "phase_id": state["phase_id"],
+        }
+    }
 
     return {
         "current_votes": new_vote,

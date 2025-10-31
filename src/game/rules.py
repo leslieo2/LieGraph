@@ -70,15 +70,15 @@ def assign_roles_and_words(
         civilian_word, spy_word = random.choice(word_list)
 
     # 2. Prepare private states
-    player_private_states = {}
+    player_private_states: Dict[str, PlayerPrivateState] = {}
     for p in players:
-        player_private_states[p] = PlayerPrivateState(
-            assigned_word=spy_word if p in spies else civilian_word,
-            playerMindset=PlayerMindset(
-                self_belief=SelfBelief(role="civilian", confidence=0.5),
-                suspicions={},
-            ),
-        )
+        player_private_states[p] = {
+            "assigned_word": spy_word if p in spies else civilian_word,
+            "playerMindset": {
+                "self_belief": {"role": "civilian", "confidence": 0.5},
+                "suspicions": {},
+            },
+        }
 
     host_private_state = {
         "player_roles": {p: ("spy" if p in spies else "civilian") for p in players},

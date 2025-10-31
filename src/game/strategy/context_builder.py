@@ -5,10 +5,29 @@ Provides XML-based context formatting for inference and speech generation.
 """
 
 from html import escape
-from typing import List, Sequence, Dict
+from typing import List, Sequence, Dict, Any, cast
 
 from src.game.state import Speech, PlayerMindset, SelfBelief, Suspicion
 from src.game.strategy.prompt_builder import determine_clarity
+
+
+def _as_mapping(value: Any) -> Dict[str, Any]:
+    """Convert TypedDict/Pydantic objects into plain dictionaries."""
+    if value is None:
+        return {}
+    if hasattr(value, "model_dump"):
+        return cast(Dict[str, Any], value.model_dump())
+    if isinstance(value, dict):
+        return value
+    return cast(Dict[str, Any], dict(value))
+
+
+def _as_float(value: Any, default: float = 0.0) -> float:
+    """Best-effort conversion to float with a default fallback."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def trim_text_for_prompt(text: str, limit: int = 180) -> str:
@@ -35,25 +54,33 @@ def format_players_xml(players: Sequence[str], alive: Sequence[str], me: str) ->
 
 def format_mindset_xml(player_mindset: PlayerMindset) -> str:
     """Format player mindset (beliefs and suspicions) as XML."""
-    self_belief = player_mindset.self_belief
-    suspicions = player_mindset.suspicions or {}
+    mindset_dict = _as_mapping(player_mindset)
+    self_belief = _as_mapping(mindset_dict.get("self_belief"))
+    suspicions = mindset_dict.get("suspicions", {}) or {}
     suspicions_tags = []
     for pid, suspicion in suspicions.items():
-        trimmed_reason = trim_text_for_prompt(suspicion.reason, limit=160)
+        suspicion_dict = _as_mapping(suspicion)
+        trimmed_reason = trim_text_for_prompt(
+            suspicion_dict.get("reason", ""), limit=160
+        )
+        suspicion_role = suspicion_dict.get("role", "civilian")
+        suspicion_conf = _as_float(suspicion_dict.get("confidence", 0.0))
         suspicions_tags.append(
             (
                 f'<suspicion target="{escape(pid)}" '
-                f'role="{escape(suspicion.role)}" '
-                f'confidence="{suspicion.confidence:.2f}">'
+                f'role="{escape(suspicion_role)}" '
+                f'confidence="{suspicion_conf:.2f}">'
                 f"{escape(trimmed_reason)}"
                 "</suspicion>"
             )
         )
 
     suspicions_block = "".join(suspicions_tags) or "<none />"
+    self_role = self_belief.get("role", "civilian")
+    self_confidence = _as_float(self_belief.get("confidence", 0.0))
     return (
-        f'<mindset self_role="{escape(self_belief.role)}" '
-        f'self_confidence="{self_belief.confidence:.2f}">'
+        f'<mindset self_role="{escape(self_role)}" '
+        f'self_confidence="{self_confidence:.2f}">'
         f"<suspicions>{suspicions_block}</suspicions>"
         "</mindset>"
     )
@@ -138,8 +165,9 @@ def build_speech_user_context(
     current_round: int,
 ) -> str:
     """Builds the dynamic context for speech generation."""
-    self_role = self_belief.role
-    self_confidence = self_belief.confidence
+    self_belief_dict = _as_mapping(self_belief)
+    self_role = self_belief_dict.get("role", "civilian")
+    self_confidence = _as_float(self_belief_dict.get("confidence", 0.0))
 
     clarity_code, clarity_desc = determine_clarity(
         self_role, self_confidence, current_round

@@ -19,7 +19,7 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from statistics import mean
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, cast
 
 import json
 import re
@@ -86,6 +86,34 @@ class SpeechRecord:
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+
+
+def _mindset_to_dict(mindset: PlayerMindset | None) -> PlayerMindset:
+    """Normalize PlayerMindset instances into plain dictionaries."""
+    if mindset is None:
+        return cast(
+            PlayerMindset,
+            {
+                "self_belief": {"role": "civilian", "confidence": 0.0},
+                "suspicions": {},
+            },
+        )
+    if hasattr(mindset, "model_dump"):
+        return cast(PlayerMindset, mindset.model_dump())
+    if isinstance(mindset, dict):
+        return cast(PlayerMindset, mindset)
+    return cast(PlayerMindset, dict(mindset))
+
+
+def _suspicion_to_dict(suspicion: Any) -> Dict[str, Any]:
+    """Normalize suspicion payloads into plain dictionaries."""
+    if suspicion is None:
+        return {}
+    if hasattr(suspicion, "model_dump"):
+        return cast(Dict[str, Any], suspicion.model_dump())
+    if isinstance(suspicion, dict):
+        return suspicion
+    return cast(Dict[str, Any], dict(suspicion))
 
 
 class GameMetrics:
@@ -167,21 +195,26 @@ class GameMetrics:
             roles = game["roles"]
             records: List[MindsetRecord] = game["mindset_records"]
 
+            mindset_dict = _mindset_to_dict(mindset)
+            self_belief = mindset_dict.get("self_belief", {}) or {}
+
             self_accuracy = self._accuracy_score(
                 actual_role=roles[player_id],
-                predicted_role=mindset.self_belief.role,
-                confidence=mindset.self_belief.confidence,
+                predicted_role=self_belief.get("role"),
+                confidence=float(self_belief.get("confidence", 0.0)),
             )
 
             suspicion_scores: List[float] = []
-            for other_id, suspicion in mindset.suspicions.items():
+            suspicions = mindset_dict.get("suspicions", {}) or {}
+            for other_id, suspicion in suspicions.items():
                 if other_id not in roles:
                     continue
+                suspicion_dict = _suspicion_to_dict(suspicion)
                 suspicion_scores.append(
                     self._accuracy_score(
                         actual_role=roles[other_id],
-                        predicted_role=suspicion.role,
-                        confidence=suspicion.confidence,
+                        predicted_role=suspicion_dict.get("role"),
+                        confidence=float(suspicion_dict.get("confidence", 0.0)),
                     )
                 )
 

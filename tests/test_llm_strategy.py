@@ -1,3 +1,4 @@
+from typing import Dict
 from unittest.mock import MagicMock, patch
 
 from src.game.strategy import llm_update_player_mindset
@@ -13,9 +14,28 @@ from src.game.strategy.context_builder import (
 # Sample data for testing
 from src.game.state import PlayerMindset, SelfBelief, Suspicion
 
-mock_player_mindset = PlayerMindset(
-    self_belief=SelfBelief(role="civilian", confidence=0.8),
-    suspicions={"b": Suspicion(role="spy", confidence=0.6, reason="Vague speech.")},
+
+def make_self_belief(role: str = "civilian", confidence: float = 0.5) -> SelfBelief:
+    return {"role": role, "confidence": confidence}
+
+
+def make_suspicion(role: str, confidence: float, reason: str) -> Suspicion:
+    return {"role": role, "confidence": confidence, "reason": reason}
+
+
+def make_player_mindset(
+    self_belief: SelfBelief | None = None,
+    suspicions: Dict[str, Suspicion] | None = None,
+) -> PlayerMindset:
+    return {
+        "self_belief": self_belief or make_self_belief(),
+        "suspicions": suspicions or {},
+    }
+
+
+mock_player_mindset = make_player_mindset(
+    self_belief=make_self_belief(role="civilian", confidence=0.8),
+    suspicions={"b": make_suspicion("spy", 0.6, "Vague speech.")},
 )
 
 # Test data for inference functions (uses playerMindset)
@@ -46,8 +66,8 @@ mock_state_inference_zh = {
 # Test data for speech and vote functions (uses separate self_belief and suspicions)
 mock_state_speech_vote_en = {
     "my_word": "apple",
-    "self_belief": SelfBelief(role="civilian", confidence=0.8),
-    "suspicions": {"b": Suspicion(role="spy", confidence=0.6, reason="Vague speech.")},
+    "self_belief": make_self_belief(role="civilian", confidence=0.8),
+    "suspicions": {"b": make_suspicion("spy", 0.6, "Vague speech.")},
     "completed_speeches": [
         {"player_id": "b", "content": "It's a fruit.", "round": 1, "seq": 0}
     ],
@@ -58,10 +78,8 @@ mock_state_speech_vote_en = {
 
 mock_state_speech_vote_zh = {
     "my_word": "apple",
-    "self_belief": SelfBelief(role="civilian", confidence=0.8),
-    "suspicions": {
-        "b": Suspicion(role="spy", confidence=0.6, reason="Speech is very vague.")
-    },
+    "self_belief": make_self_belief(role="civilian", confidence=0.8),
+    "suspicions": {"b": make_suspicion("spy", 0.6, "Speech is very vague.")},
     "completed_speeches": [
         {"player_id": "b", "content": "It's a type of fruit.", "round": 1, "seq": 0}
     ],
@@ -151,38 +169,43 @@ def test_build_speech_prompt_zh():
     assert '<speech seq="0" player="b">It&#x27;s a type of fruit.</speech>' in prompt
 
 
-@patch("src.game.strategy.strategy_core.create_agent")
-def test_llm_update_player_mindset_success(mock_create_agent):
+def test_llm_update_player_mindset_success():
     """Tests successful belief inference with structured output."""
+    # Mock the agent's invoke method to return structured response
     mock_agent = MagicMock()
     mock_agent.invoke.return_value = {
-        "structured_response": PlayerMindset(
-            self_belief=SelfBelief(role="civilian", confidence=0.9),
-            suspicions={
-                "b": Suspicion(role="spy", confidence=0.7, reason="Suspicious speech")
-            },
+        "structured_response": make_player_mindset(
+            self_belief=make_self_belief("civilian", 0.9),
+            suspicions={"b": make_suspicion("spy", 0.7, "Suspicious speech")},
         )
     }
-    mock_create_agent.return_value = mock_agent
 
-    test_state = mock_state_inference_en.copy()
-    result = llm_update_player_mindset(llm_client=MagicMock(), **test_state)
+    # Mock create_agent to return our mock agent
+    with patch("src.game.strategy.strategy_core.create_agent", return_value=mock_agent):
+        mock_llm = MagicMock()
+        test_state = mock_state_inference_en.copy()
+        result = llm_update_player_mindset(llm_client=mock_llm, **test_state)
 
-    assert result.self_belief.role == "civilian"
-    assert result.suspicions["b"].reason == "Suspicious speech"
-    mock_create_agent.assert_called_once()
-    mock_agent.invoke.assert_called_once()
+        assert result["self_belief"]["role"] == "civilian"
+        assert result["suspicions"]["b"]["reason"] == "Suspicious speech"
+        mock_agent.invoke.assert_called_once()
 
 
-@patch("src.game.strategy.strategy_core.create_agent")
-def test_llm_update_player_mindset_failure(mock_create_agent):
+def test_llm_update_player_mindset_failure():
     """Tests fallback behavior when structured output extraction fails for inference."""
+    # Mock the agent's invoke method to return None (simulating failure)
     mock_agent = MagicMock()
     mock_agent.invoke.return_value = {"structured_response": None}
-    mock_create_agent.return_value = mock_agent
 
-    test_state = mock_state_inference_en.copy()
-    result = llm_update_player_mindset(llm_client=MagicMock(), **test_state)
+    # Mock create_agent to return our mock agent
+    with patch("src.game.strategy.strategy_core.create_agent", return_value=mock_agent):
+        mock_llm = MagicMock()
+        test_state = mock_state_inference_en.copy()
+        result = llm_update_player_mindset(llm_client=mock_llm, **test_state)
 
-    assert result.self_belief.role == "civilian"
-    assert result.self_belief.confidence == mock_player_mindset.self_belief.confidence
+        assert result["self_belief"]["role"] == "civilian"
+        assert (
+            result["self_belief"]["confidence"]
+            == mock_player_mindset["self_belief"]["confidence"]
+        )
+        mock_agent.invoke.assert_called_once()

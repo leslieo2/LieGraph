@@ -2,6 +2,8 @@
 Test coverage for game state structures and utility functions
 """
 
+from typing import Dict
+
 import pytest
 
 from src.game.state import (
@@ -21,6 +23,37 @@ from src.game.state import (
     merge_votes,
     create_speech_record,
 )
+
+
+def make_self_belief(role: str = "civilian", confidence: float = 0.5) -> SelfBelief:
+    return {"role": role, "confidence": confidence}
+
+
+def make_suspicion(role: str, confidence: float, reason: str) -> Suspicion:
+    return {"role": role, "confidence": confidence, "reason": reason}
+
+
+def make_player_mindset(
+    self_belief: SelfBelief | None = None,
+    suspicions: Dict[str, Suspicion] | None = None,
+) -> PlayerMindset:
+    return {
+        "self_belief": self_belief or make_self_belief(),
+        "suspicions": suspicions or {},
+    }
+
+
+def make_player_private_state(
+    assigned_word: str, mindset: PlayerMindset | None = None
+) -> PlayerPrivateState:
+    return {
+        "assigned_word": assigned_word,
+        "playerMindset": mindset or make_player_mindset(),
+    }
+
+
+def make_vote(target: str, ts: int, phase_id: str) -> Vote:
+    return {"target": target, "ts": ts, "phase_id": phase_id}
 
 
 class TestStateStructures:
@@ -43,40 +76,40 @@ class TestStateStructures:
 
     def test_vote_structure(self):
         """Test Vote structure (no abstention allowed)"""
-        vote = Vote(
-            target="player2",
-            ts=1234567890,
-            phase_id="1:voting:abc123",
-        )
-        assert vote.target == "player2"
-        assert vote.ts == 1234567890
-        assert vote.phase_id == "1:voting:abc123"
+        vote: Vote = {
+            "target": "player2",
+            "ts": 1234567890,
+            "phase_id": "1:voting:abc123",
+        }
+        assert vote["target"] == "player2"
+        assert vote["ts"] == 1234567890
+        assert vote["phase_id"] == "1:voting:abc123"
 
     def test_self_belief_structure(self):
         """Test SelfBelief structure"""
-        belief = SelfBelief(role="civilian", confidence=0.8)
-        assert belief.role == "civilian"
-        assert belief.confidence == 0.8
+        belief = make_self_belief(role="civilian", confidence=0.8)
+        assert belief["role"] == "civilian"
+        assert belief["confidence"] == 0.8
 
     def test_player_private_state_structure(self):
         """Test PlayerPrivateState structure"""
-        player_state = PlayerPrivateState(
-            assigned_word="apple",
-            playerMindset=PlayerMindset(
-                self_belief=SelfBelief(role="civilian", confidence=0.8),
+        player_state = make_player_private_state(
+            "apple",
+            make_player_mindset(
+                self_belief=make_self_belief(role="civilian", confidence=0.8),
                 suspicions={
-                    "player2": Suspicion(role="spy", confidence=0.6, reason="test"),
-                    "player3": Suspicion(
-                        role="civilian", confidence=0.7, reason="test"
-                    ),
+                    "player2": make_suspicion("spy", 0.6, "test"),
+                    "player3": make_suspicion("civilian", 0.7, "test"),
                 },
             ),
         )
-        assert player_state.assigned_word == "apple"
-        assert player_state.playerMindset.self_belief.role == "civilian"
-        assert player_state.playerMindset.self_belief.confidence == 0.8
-        assert player_state.playerMindset.suspicions["player2"].role == "spy"
-        assert player_state.playerMindset.suspicions["player3"].role == "civilian"
+        assert player_state["assigned_word"] == "apple"
+        assert player_state["playerMindset"]["self_belief"]["role"] == "civilian"
+        assert player_state["playerMindset"]["self_belief"]["confidence"] == 0.8
+        assert player_state["playerMindset"]["suspicions"]["player2"]["role"] == "spy"
+        assert (
+            player_state["playerMindset"]["suspicions"]["player3"]["role"] == "civilian"
+        )
 
     def test_host_private_state_structure(self):
         """Test HostPrivateState structure"""
@@ -121,31 +154,31 @@ class TestUtilityFunctions:
                 "spy_word": "banana",
             },
             "player_private_states": {
-                "player1": PlayerPrivateState(
-                    assigned_word="apple",
-                    playerMindset=PlayerMindset(
-                        self_belief=SelfBelief(role="civilian", confidence=0.8),
+                "player1": make_player_private_state(
+                    "apple",
+                    make_player_mindset(
+                        self_belief=make_self_belief("civilian", 0.8),
                         suspicions={},
                     ),
                 ),
-                "player2": PlayerPrivateState(
-                    assigned_word="banana",
-                    playerMindset=PlayerMindset(
-                        self_belief=SelfBelief(role="spy", confidence=0.9),
+                "player2": make_player_private_state(
+                    "banana",
+                    make_player_mindset(
+                        self_belief=make_self_belief("spy", 0.9),
                         suspicions={},
                     ),
                 ),
-                "player3": PlayerPrivateState(
-                    assigned_word="apple",
-                    playerMindset=PlayerMindset(
-                        self_belief=SelfBelief(role="civilian", confidence=0.7),
+                "player3": make_player_private_state(
+                    "apple",
+                    make_player_mindset(
+                        self_belief=make_self_belief("civilian", 0.7),
                         suspicions={},
                     ),
                 ),
-                "player4": PlayerPrivateState(
-                    assigned_word="apple",
-                    playerMindset=PlayerMindset(
-                        self_belief=SelfBelief(role="civilian", confidence=0.6),
+                "player4": make_player_private_state(
+                    "apple",
+                    make_player_mindset(
+                        self_belief=make_self_belief("civilian", 0.6),
                         suspicions={},
                     ),
                 ),
@@ -237,26 +270,10 @@ class TestUtilityFunctions:
         sample_state["game_phase"] = "voting"
         sample_state["phase_id"] = "1:voting:xyz789"
         sample_state["current_votes"] = {
-            "player1": Vote(
-                target="player2",
-                ts=1234567890,
-                phase_id="1:voting:xyz789",
-            ),
-            "player2": Vote(
-                target="player1",
-                ts=1234567891,
-                phase_id="1:voting:xyz789",
-            ),
-            "player3": Vote(
-                target="player2",
-                ts=1234567892,
-                phase_id="1:voting:xyz789",
-            ),
-            "player4": Vote(
-                target="player3",
-                ts=1234567893,
-                phase_id="1:voting:xyz789",
-            ),
+            "player1": make_vote("player2", 1234567890, "1:voting:xyz789"),
+            "player2": make_vote("player1", 1234567891, "1:voting:xyz789"),
+            "player3": make_vote("player2", 1234567892, "1:voting:xyz789"),
+            "player4": make_vote("player3", 1234567893, "1:voting:xyz789"),
         }
         assert votes_ready(sample_state)
 
@@ -265,26 +282,10 @@ class TestUtilityFunctions:
         sample_state["game_phase"] = "voting"
         sample_state["phase_id"] = "1:voting:xyz789"
         sample_state["current_votes"] = {
-            "player1": Vote(
-                target="player2",
-                ts=1234567890,
-                phase_id="1:voting:xyz789",
-            ),
-            "player2": Vote(
-                target="player1",
-                ts=1234567891,
-                phase_id="1:voting:xyz789",
-            ),
-            "player3": Vote(
-                target="player2",
-                ts=1234567892,
-                phase_id="wrong_phase",
-            ),  # Wrong phase
-            "player4": Vote(
-                target="player3",
-                ts=1234567893,
-                phase_id="1:voting:xyz789",
-            ),
+            "player1": make_vote("player2", 1234567890, "1:voting:xyz789"),
+            "player2": make_vote("player1", 1234567891, "1:voting:xyz789"),
+            "player3": make_vote("player2", 1234567892, "wrong_phase"),
+            "player4": make_vote("player3", 1234567893, "1:voting:xyz789"),
         }
         assert not votes_ready(sample_state)  # player3's vote is ignored
 
@@ -362,13 +363,9 @@ class TestStateConstraints:
     def test_vote_target_not_none(self):
         """Test that Vote target cannot be None (no abstention)"""
         # This should raise a type error if we try to create a vote with None target
-        vote = Vote(
-            target="player2",  # Must be a string, not None
-            ts=1234567890,
-            phase_id="1:voting:abc123",
-        )
-        assert vote.target is not None
-        assert isinstance(vote.target, str)
+        vote = make_vote("player2", 1234567890, "1:voting:abc123")
+        assert vote["target"] is not None
+        assert isinstance(vote["target"], str)
 
     def test_eliminated_players_subset(self):
         """Test that eliminated_players is always a subset of players"""
@@ -422,24 +419,24 @@ class TestStateUpdateFunctions:
                 "spy_word": "banana",
             },
             "player_private_states": {
-                "player1": PlayerPrivateState(
-                    assigned_word="apple",
-                    playerMindset=PlayerMindset(
-                        self_belief=SelfBelief(role="civilian", confidence=0.8),
+                "player1": make_player_private_state(
+                    "apple",
+                    make_player_mindset(
+                        self_belief=make_self_belief("civilian", 0.8),
                         suspicions={},
                     ),
                 ),
-                "player2": PlayerPrivateState(
-                    assigned_word="banana",
-                    playerMindset=PlayerMindset(
-                        self_belief=SelfBelief(role="spy", confidence=0.9),
+                "player2": make_player_private_state(
+                    "banana",
+                    make_player_mindset(
+                        self_belief=make_self_belief("spy", 0.9),
                         suspicions={},
                     ),
                 ),
-                "player3": PlayerPrivateState(
-                    assigned_word="apple",
-                    playerMindset=PlayerMindset(
-                        self_belief=SelfBelief(role="civilian", confidence=0.7),
+                "player3": make_player_private_state(
+                    "apple",
+                    make_player_mindset(
+                        self_belief=make_self_belief("civilian", 0.7),
                         suspicions={},
                     ),
                 ),
@@ -448,60 +445,46 @@ class TestStateUpdateFunctions:
 
     def test_merge_votes_same_phase(self):
         """Test merging votes from same phase"""
-        current_votes = {
-            "player1": Vote(target="player2", ts=1000, phase_id="1:voting:abc123")
-        }
+        current_votes = {"player1": make_vote("player2", 1000, "1:voting:abc123")}
         new_votes = {
-            "player2": Vote(target="player1", ts=1100, phase_id="1:voting:abc123"),
-            "player3": Vote(target="player2", ts=1200, phase_id="1:voting:abc123"),
+            "player2": make_vote("player1", 1100, "1:voting:abc123"),
+            "player3": make_vote("player2", 1200, "1:voting:abc123"),
         }
 
         merged = merge_votes(current_votes, new_votes)
 
         assert len(merged) == 3
-        assert merged["player1"].target == "player2"
-        assert merged["player2"].target == "player1"
-        assert merged["player3"].target == "player2"
+        assert merged["player1"]["target"] == "player2"
+        assert merged["player2"]["target"] == "player1"
+        assert merged["player3"]["target"] == "player2"
 
     def test_merge_votes_different_phase(self):
         """Test merging votes from different phases (should be ignored)"""
-        current_votes = {
-            "player1": Vote(target="player2", ts=1000, phase_id="1:voting:abc123")
-        }
+        current_votes = {"player1": make_vote("player2", 1000, "1:voting:abc123")}
         new_votes = {
-            "player2": Vote(
-                target="player1",
-                ts=1100,
-                phase_id="wrong_phase",
-            ),  # Wrong phase
-            "player3": Vote(target="player2", ts=1200, phase_id="1:voting:abc123"),
+            "player2": make_vote("player1", 1100, "wrong_phase"),
+            "player3": make_vote("player2", 1200, "1:voting:abc123"),
         }
 
         merged = merge_votes(current_votes, new_votes)
 
         assert len(merged) == 3  # All votes merged regardless of phase
-        assert merged["player1"].target == "player2"
-        assert merged["player2"].target == "player1"
-        assert merged["player3"].target == "player2"
+        assert merged["player1"]["target"] == "player2"
+        assert merged["player2"]["target"] == "player1"
+        assert merged["player3"]["target"] == "player2"
 
     def test_merge_votes_timestamp_conflict(self):
         """Test merging votes with timestamp conflict (choose latest)"""
-        current_votes = {
-            "player1": Vote(target="player2", ts=1000, phase_id="1:voting:abc123")
-        }
+        current_votes = {"player1": make_vote("player2", 1000, "1:voting:abc123")}
         new_votes = {
-            "player1": Vote(
-                target="player3",
-                ts=1500,
-                phase_id="1:voting:abc123",
-            )  # Later vote
+            "player1": make_vote("player3", 1500, "1:voting:abc123"),
         }
 
         merged = merge_votes(current_votes, new_votes)
 
         assert len(merged) == 1
-        assert merged["player1"].target == "player3"  # Should use the later vote
-        assert merged["player1"].ts == 1500
+        assert merged["player1"]["target"] == "player3"  # Should use the later vote
+        assert merged["player1"]["ts"] == 1500
 
     def test_add_speech(self, sample_state):
         """Test adding speech with automatic seq and timestamp"""

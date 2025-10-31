@@ -1,3 +1,5 @@
+from typing import Dict
+
 import pytest
 from unittest.mock import patch, MagicMock
 from src.game.nodes.player import player_speech, player_vote
@@ -8,6 +10,33 @@ from src.game.state import (
     SelfBelief,
     Suspicion,
 )
+
+
+def make_self_belief(role: str = "civilian", confidence: float = 0.5) -> SelfBelief:
+    return {"role": role, "confidence": confidence}
+
+
+def make_suspicion(role: str, confidence: float, reason: str) -> Suspicion:
+    return {"role": role, "confidence": confidence, "reason": reason}
+
+
+def make_player_mindset(
+    self_belief: SelfBelief | None = None,
+    suspicions: Dict[str, Suspicion] | None = None,
+) -> PlayerMindset:
+    return {
+        "self_belief": self_belief or make_self_belief(),
+        "suspicions": suspicions or {},
+    }
+
+
+def make_player_private_state(
+    assigned_word: str, mindset: PlayerMindset | None = None
+) -> PlayerPrivateState:
+    return {
+        "assigned_word": assigned_word,
+        "playerMindset": mindset or make_player_mindset(),
+    }
 
 
 @pytest.fixture
@@ -39,30 +68,31 @@ def base_player_state(player_id):
             "spy_word": "orange",
         },
         "player_private_states": {
-            "a": PlayerPrivateState(
-                assigned_word="apple",
-                playerMindset=PlayerMindset(
-                    self_belief=SelfBelief(role="civilian", confidence=0.5),
+            "a": make_player_private_state(
+                "apple",
+                make_player_mindset(
+                    self_belief=make_self_belief("civilian", 0.5),
                     suspicions={},
                 ),
             ),
-            "b": PlayerPrivateState(
-                assigned_word="apple",
-                playerMindset=PlayerMindset(
-                    self_belief=SelfBelief(role="civilian", confidence=0.5),
+            "b": make_player_private_state(
+                "apple",
+                make_player_mindset(
+                    self_belief=make_self_belief("civilian", 0.5),
                     suspicions={},
                 ),
             ),
-            "c": PlayerPrivateState(
-                assigned_word="orange",
-                playerMindset=PlayerMindset(
-                    self_belief=SelfBelief(role="spy", confidence=0.5), suspicions={}
+            "c": make_player_private_state(
+                "orange",
+                make_player_mindset(
+                    self_belief=make_self_belief("spy", 0.5),
+                    suspicions={},
                 ),
             ),
-            "d": PlayerPrivateState(
-                assigned_word="apple",
-                playerMindset=PlayerMindset(
-                    self_belief=SelfBelief(role="civilian", confidence=0.5),
+            "d": make_player_private_state(
+                "apple",
+                make_player_mindset(
+                    self_belief=make_self_belief("civilian", 0.5),
                     suspicions={},
                 ),
             ),
@@ -81,9 +111,9 @@ def test_player_speech(
     mock_llm_client = MagicMock()
     mock_get_llm.return_value = mock_llm_client
 
-    mock_infer.return_value = PlayerMindset(
-        self_belief=SelfBelief(role="civilian", confidence=0.9),
-        suspicions={"c": Suspicion(role="spy", confidence=0.7, reason="vague")},
+    mock_infer.return_value = make_player_mindset(
+        self_belief=make_self_belief("civilian", 0.9),
+        suspicions={"c": make_suspicion("spy", 0.7, "vague")},
     )
     mock_speech.return_value = "This is a test speech."
 
@@ -98,8 +128,8 @@ def test_player_speech(
 
     assert "player_private_states" in update
     private_update = update["player_private_states"][player_id]
-    assert private_update.playerMindset.self_belief.role == "civilian"
-    assert private_update.playerMindset.suspicions["c"].role == "spy"
+    assert private_update["playerMindset"]["self_belief"]["role"] == "civilian"
+    assert private_update["playerMindset"]["suspicions"]["c"]["role"] == "spy"
 
     # Verify mocks were called correctly
     mock_get_llm.assert_called_once()
@@ -118,9 +148,9 @@ def test_player_vote(
     mock_llm_client = MagicMock()
     mock_get_llm.return_value = mock_llm_client
 
-    mock_infer.return_value = PlayerMindset(
-        self_belief=SelfBelief(role="civilian", confidence=0.9),
-        suspicions={"c": Suspicion(role="spy", confidence=0.8, reason="very vague")},
+    mock_infer.return_value = make_player_mindset(
+        self_belief=make_self_belief("civilian", 0.9),
+        suspicions={"c": make_suspicion("spy", 0.8, "very vague")},
     )
 
     # Mock the agent to return a vote for "c"
@@ -147,11 +177,11 @@ def test_player_vote(
     assert "current_votes" in update
     # With the current voting logic: civilian player suspects c as spy -> lowest score
     # Players b and d have neutral score (0.0), so a selects the most suspicious player "c"
-    assert update["current_votes"][player_id].target == "c"
+    assert update["current_votes"][player_id]["target"] == "c"
 
     assert "player_private_states" in update
     private_update = update["player_private_states"][player_id]
-    assert private_update.playerMindset.self_belief.role == "civilian"
+    assert private_update["playerMindset"]["self_belief"]["role"] == "civilian"
 
     # Verify mocks
     # LLM client is called once for the agent

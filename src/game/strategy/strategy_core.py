@@ -5,23 +5,49 @@ Coordinates prompt building, context construction, and LLM interaction
 for player mindset updates and speech generation.
 """
 
-from typing import Any, List, Dict, Sequence
+from typing import Any, List, Dict, Sequence, cast
+from venv import logger
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
 from src.game.state import Speech, PlayerMindset, SelfBelief
-from src.game.strategy.logging_utils import log_self_belief_update
-from src.game.strategy.prompt_builder import (
-    format_inference_system_prompt,
-    format_speech_system_prompt,
-)
 from src.game.strategy.context_builder import (
     build_inference_user_context,
     build_speech_user_context,
 )
+from src.game.strategy.logging_utils import log_self_belief_update
+from src.game.strategy.models import PlayerMindsetModel, SelfBeliefModel
+from src.game.strategy.prompt_builder import (
+    format_inference_system_prompt,
+    format_speech_system_prompt,
+)
 from src.game.strategy.text_utils import sanitize_speech_output
+
+
+def _to_mindset_model(
+    mindset: PlayerMindset | PlayerMindsetModel | None,
+) -> PlayerMindsetModel:
+    """Convert shared-state mindset data into a Pydantic model."""
+    if isinstance(mindset, PlayerMindsetModel):
+        return mindset
+
+    if mindset is None:
+        return PlayerMindsetModel(
+            self_belief=SelfBeliefModel(role="civilian", confidence=0.5),
+            suspicions={},
+        )
+
+    if hasattr(mindset, "model_dump"):
+        return PlayerMindsetModel(**mindset.model_dump())
+
+    return PlayerMindsetModel(**cast(Dict[str, Any], mindset))
+
+
+def _mindset_model_to_state(model: PlayerMindsetModel) -> PlayerMindset:
+    """Convert a Pydantic mindset model into the plain dict state form."""
+    return cast(PlayerMindset, model.model_dump())
 
 
 def llm_update_player_mindset(
@@ -32,7 +58,7 @@ def llm_update_player_mindset(
     alive: List[str],
     me: str,
     rules: Dict[str, Any],
-    existing_player_mindset: PlayerMindset,
+    existing_player_mindset: PlayerMindset | None,
 ) -> PlayerMindset:
     """
     Use LLM to update player's beliefs about their role and suspicions of others.
@@ -50,7 +76,11 @@ def llm_update_player_mindset(
     Returns:
         Updated PlayerMindset with new beliefs
     """
-    existing_self_belief = existing_player_mindset.self_belief
+    existing_model = _to_mindset_model(existing_player_mindset)
+    existing_state = _mindset_model_to_state(existing_model)
+    existing_self_belief = existing_state.get(
+        "self_belief", {"role": "civilian", "confidence": 0.5}
+    )
 
     # 1. Format the system prompt (instructions)
     system_prompt = format_inference_system_prompt(
@@ -61,37 +91,53 @@ def llm_update_player_mindset(
 
     # 2. Build the user context (structured, dynamic state)
     user_context = build_inference_user_context(
-        completed_speeches, players, alive, me, existing_player_mindset
+        completed_speeches, players, alive, me, existing_state
     )
 
-    # Create agent with structured output using ToolStrategy
+    # Create agent with ToolStrategy for structured output so models without
+    # native structured output will fall back to tool calling automatically.
+    response_format = ToolStrategy(
+        schema=PlayerMindsetModel,
+        tool_message_content="Player mindset captured.",
+    )
+
     agent = create_agent(
         model=llm_client,
-        tools=[],  # No additional tools needed for structured output
-        response_format=ToolStrategy(PlayerMindset),
+        tools=[],
+        response_format=response_format,
     )
 
-    # Invoke the agent with the prompts
-    result = agent.invoke(
-        {
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_context},
-            ]
-        }
-    )
+    try:
+        # Include system prompt in the messages
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_context),
+        ]
+        result = agent.invoke({"messages": messages})
 
-    # Extract structured response from result
-    if result.get("structured_response"):
-        new_mindset = result["structured_response"]
-        log_self_belief_update(me, existing_self_belief, new_mindset.self_belief)
-        return new_mindset
+        # Extract structured response from agent result
+        structured = result.get("structured_response")
+
+        if structured:
+            if not isinstance(structured, PlayerMindsetModel):
+                structured = PlayerMindsetModel.model_validate(structured)
+            new_state = _mindset_model_to_state(structured)
+            log_self_belief_update(
+                me,
+                existing_self_belief,
+                new_state.get("self_belief", {"role": "civilian", "confidence": 0.5}),
+            )
+            return new_state
+    except Exception as exc:
+        logger.exception("Structured mindset failed: %s", exc)
 
     # Fallback: LLM failed, preserve previous mindset
     log_self_belief_update(
-        me, existing_self_belief, existing_player_mindset.self_belief
+        me,
+        existing_self_belief,
+        existing_self_belief,
     )
-    return existing_player_mindset
+    return existing_state
 
 
 def llm_generate_speech(
