@@ -88,6 +88,28 @@ mock_state_speech_vote_zh = {
     "current_round": 1,
 }
 
+mock_speech_plan = {
+    "player": "a",
+    "round": 1,
+    "clarity": "low",
+    "clarity_reason": "LOW clarity — broad and neutral foundation",
+    "goal": {
+        "label": "stay_neutral",
+        "reason": "Gather more evidence before committing.",
+    },
+    "self_role_view": "civilian",
+    "self_confidence": 0.8,
+    "alive_teammates": ["b", "c"],
+    "top_suspicions": [
+        {
+            "player_id": "b",
+            "suspected_role": "spy",
+            "confidence": 0.6,
+            "reason": "Vague speech.",
+        }
+    ],
+}
+
 
 def build_inference_prompt_for_test(
     my_word: str,
@@ -138,10 +160,11 @@ def build_speech_prompt_for_test(
     me: str,
     alive: list,
     current_round: int,
+    speech_plan: dict | None = None,
 ):
     static_prompt = _format_speech_system_prompt(my_word, self_belief)
     dynamic_prompt = _build_speech_user_context(
-        self_belief, completed_speeches, me, alive, current_round
+        self_belief, completed_speeches, me, alive, current_round, speech_plan
     )
     return static_prompt + dynamic_prompt
 
@@ -149,23 +172,33 @@ def build_speech_prompt_for_test(
 def test_build_speech_prompt_en():
     """Tests that the English speech prompt is built correctly."""
     test_state = mock_state_speech_vote_en.copy()
-    prompt = build_speech_prompt_for_test(**test_state)
+    prompt = build_speech_prompt_for_test(
+        speech_plan=mock_speech_plan,
+        **test_state,
+    )
     assert 'Your secret word is "apple"' in prompt
     assert "<speech_context>" in prompt
     assert '<self role="civilian" confidence="0.80" />' in prompt
     assert '<strategy round="1" clarity="low">' in prompt
+    assert '<planning source="plan_speech_tool">' in prompt
+    assert 'goal="stay_neutral"' in prompt
+    assert '<suspect id="b" role="spy" confidence="0.60">' in prompt
     assert '<speech seq="0" player="b">It&#x27;s a fruit.</speech>' in prompt
 
 
 def test_build_speech_prompt_zh():
     """Tests that the Chinese speech prompt is built correctly."""
     test_state = mock_state_speech_vote_zh.copy()
-    prompt = build_speech_prompt_for_test(**test_state)
+    prompt = build_speech_prompt_for_test(
+        speech_plan=mock_speech_plan,
+        **test_state,
+    )
     # assert "轮到你发言了" in prompt  # TODO: Add translation check
     assert 'Your secret word is "apple"' in prompt
     assert "<speech_context>" in prompt
     assert '<self role="civilian" confidence="0.80" />' in prompt
     assert '<strategy round="1" clarity="low">' in prompt
+    assert '<planning source="plan_speech_tool">' in prompt
     assert '<speech seq="0" player="b">It&#x27;s a type of fruit.</speech>' in prompt
 
 

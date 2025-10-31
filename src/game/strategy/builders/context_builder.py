@@ -158,6 +158,7 @@ def build_speech_user_context(
     me: str,
     alive: List[str],
     current_round: int,
+    speech_plan: Dict[str, Any] | None = None,
 ) -> str:
     """Builds the dynamic context for speech generation."""
     self_belief_dict = _as_mapping(self_belief)
@@ -173,13 +174,45 @@ def build_speech_user_context(
 
     speech_logs_block = format_speeches_xml(completed_speeches)
 
+    if speech_plan:
+        plan_goal = _as_mapping(speech_plan.get("goal"))
+        plan_goal_label = plan_goal.get("label", "stay_neutral")
+        plan_goal_reason = trim_text_for_prompt(plan_goal.get("reason", ""), limit=200)
+        plan_clarity = speech_plan.get("clarity", clarity_code)
+        plan_section = (
+            '<planning source="plan_speech_tool">'
+            f'<plan player="{escape(str(speech_plan.get("player", me)))}" '
+            f'round="{speech_plan.get("round", current_round)}" '
+            f'goal="{escape(plan_goal_label)}" '
+            f'clarity="{escape(plan_clarity)}">'
+            f"{escape(plan_goal_reason)}"
+            "</plan>"
+            "<suspects>"
+        )
+        for suspect in speech_plan.get("top_suspicions", []):
+            suspect_dict = _as_mapping(suspect)
+            plan_section += (
+                f'<suspect id="{escape(str(suspect_dict.get("player_id", "")))}" '
+                f'role="{escape(str(suspect_dict.get("suspected_role", "")))}" '
+                f'confidence="{_as_float(suspect_dict.get("confidence", 0.0)):.2f}">'
+                f"{escape(trim_text_for_prompt(suspect_dict.get('reason', ''), limit=140))}"
+                "</suspect>"
+            )
+        plan_section += "</suspects></planning>"
+    else:
+        plan_section = (
+            '<planning source="plan_speech_tool" available="false">'
+            "No plan_speech tool output provided."
+            "</planning>"
+        )
+
     return (
         "<speech_context>"
         f'<self role="{escape(self_role)}" confidence="{self_confidence:.2f}" />'
         f'<strategy round="{current_round}" clarity="{clarity_code}">{escape(clarity_desc)}</strategy>'
         f'<speaker id="{escape(me)}" />'
-        f'{alive_block}<current_round index="{current_round}" />{speech_logs_block}'
-        "<response_guidance>Return exactly one line of speech; avoid emojis, labels, or extra commentary.</response_guidance>"
+        f'{alive_block}<current_round index="{current_round}" />{plan_section}{speech_logs_block}'
+        "<response_guidance>Call the plan_speech tool if you need to adjust strategy, then return exactly one line of speech without emojis, labels, or extra commentary.</response_guidance>"
         "</speech_context>"
     )
 

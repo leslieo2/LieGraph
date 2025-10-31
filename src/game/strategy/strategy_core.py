@@ -13,6 +13,7 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
 from src.game.agent_tools.vote_tools import vote_tools
+from src.game.agent_tools.speech_tools import speech_planning_tools
 from src.game.state import (
     Speech,
     PlayerMindset,
@@ -162,6 +163,7 @@ def llm_generate_speech(
     me: str,
     alive: List[str],
     current_round: int,
+    speech_plan: Dict[str, Any] | None = None,
 ) -> str:
     """
     Use LLM to generate a strategic speech based on current beliefs.
@@ -175,13 +177,19 @@ def llm_generate_speech(
         me: Current player's ID
         alive: Currently alive player IDs
         current_round: Current game round number
+        speech_plan: Optional structured plan produced by plan_speech tool
 
     Returns:
         Generated speech as a single-line string
     """
     system_prompt = format_speech_system_prompt(my_word, self_belief)
     user_context = build_speech_user_context(
-        self_belief, completed_speeches, me, alive, current_round
+        self_belief,
+        completed_speeches,
+        me,
+        alive,
+        current_round,
+        speech_plan=speech_plan,
     )
 
     messages = [
@@ -193,6 +201,26 @@ def llm_generate_speech(
 
     raw_text = response.content if hasattr(response, "content") else response
     return sanitize_speech_output(raw_text)
+
+
+def plan_player_speech(
+    state: GameState,
+    me: str,
+    current_mindset: PlayerMindset,
+) -> Dict[str, Any]:
+    """
+    Produce a structured speech plan using the planning tool.
+
+    This helper lets callers experiment with planning without yet wiring the
+    result into the speech generation prompt/agent.
+    """
+    planner_tools = speech_planning_tools(
+        state,
+        me,
+        mindset_overrides={me: current_mindset},
+    )
+    planner = planner_tools[0]
+    return planner.func()
 
 
 def llm_decide_vote(

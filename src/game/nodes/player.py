@@ -40,6 +40,7 @@ from ..strategy import (
     llm_update_player_mindset,
     llm_generate_speech,
     llm_decide_vote,
+    plan_player_speech,
 )
 from ..strategy.serialization import normalize_mindset
 
@@ -144,6 +145,14 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
 
     updated_mindset_state = normalize_mindset(updated_mindset)
 
+    try:
+        speech_plan = plan_player_speech(state, player_id, updated_mindset_state)
+    except Exception as exc:
+        print(
+            f"⚠️ SPEECH PLAN TOOL failed for {player_id}: {exc}, falling back without plan."
+        )
+        speech_plan = None
+
     # Generate speech using LLM
     new_speech_text = llm_generate_speech(
         llm_client=llm_client,
@@ -154,6 +163,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
         me=player_id,
         alive=alive_players(state),
         current_round=state["current_round"],
+        speech_plan=speech_plan,
     )
 
     print(f'🎤 PLAYER SPEECH: {player_id} says: "{new_speech_text}"')
