@@ -216,7 +216,11 @@ def llm_decide_vote(
         Player ID selected as the vote target
     """
     # Pass the freshly inferred mindset so vote heuristics reflect the latest suspicions.
-    tools = vote_tools(state, mindset_overrides={me: current_mindset})
+    tools = vote_tools(
+        state,
+        me,
+        mindset_overrides={me: current_mindset},
+    )
     response_format = ToolStrategy(
         schema=VoteDecisionModel,
         tool_message_content="Vote decision captured.",
