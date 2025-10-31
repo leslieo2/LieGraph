@@ -1,11 +1,35 @@
-from typing import Dict
+from typing import Dict, Optional
 from langchain.tools import tool
 
-from src.game.state import GameState, alive_players
+from src.game.state import GameState, PlayerMindset, alive_players
 from src.game.strategy.serialization import normalize_mindset, to_plain_dict
 
 
-def vote_tools(state: GameState):
+def vote_tools(
+    state: GameState, mindset_overrides: Optional[Dict[str, PlayerMindset]] = None
+):
+    """
+    Bind voting tools against the shared state.
+
+    The optional mindset_overrides allows callers (e.g., llm_decide_vote) to provide
+    freshly inferred player mindsets before the reducer persists them back into state.
+    This keeps the heuristic scoring in the tools aligned with the LLM's most recent
+    analysis and avoids voting on stale beliefs.
+    """
+    mindset_overrides = mindset_overrides or {}
+
+    def _get_player_mindset(player_id: str):
+        """
+        Resolve the latest mindset for the player from overrides or shared state.
+        Normalization keeps downstream logic consistent.
+        """
+        if player_id in mindset_overrides:
+            return normalize_mindset(mindset_overrides[player_id])
+
+        player_private_state = state.get("player_private_states", {}).get(player_id, {})
+        player_mindset = player_private_state.get("playerMindset", {})
+        return normalize_mindset(player_mindset)
+
     @tool(description="vote for the most suspicion")
     def decide_player_vote(player_id: str) -> str:
         """
@@ -16,9 +40,7 @@ def vote_tools(state: GameState):
         """
 
         # Get player's mindset from state
-        player_private_state = state.get("player_private_states", {}).get(player_id, {})
-        player_mindset = player_private_state.get("playerMindset", {})
-        mindset_state = normalize_mindset(player_mindset)
+        mindset_state = _get_player_mindset(player_id)
         alive = alive_players(state)
 
         # Determine own role: if confidence > 50%, use current role, otherwise use opposite
@@ -73,9 +95,7 @@ def vote_tools(state: GameState):
         """
 
         # Get player's mindset from state
-        player_private_state = state.get("player_private_states", {}).get(player_id, {})
-        player_mindset = player_private_state.get("playerMindset", {})
-        mindset_state = normalize_mindset(player_mindset)
+        mindset_state = _get_player_mindset(player_id)
         alive = alive_players(state)
 
         # Determine own role: if confidence > 50%, use current role, otherwise use opposite
