@@ -14,6 +14,7 @@ This package provides modular components for AI agent decision-making:
 from src.game.strategy.strategy_core import (
     llm_update_player_mindset,
     llm_generate_speech,
+    llm_decide_vote,
 )
 
-__all__ = ["llm_update_player_mindset", "llm_generate_speech"]
+__all__ = ["llm_update_player_mindset", "llm_generate_speech", "llm_decide_vote"]

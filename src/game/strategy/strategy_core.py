@@ -12,16 +12,29 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from src.game.state import Speech, PlayerMindset, SelfBelief
+from src.game.agent_tools.vote_tools import vote_tools
+from src.game.state import (
+    Speech,
+    PlayerMindset,
+    SelfBelief,
+    GameState,
+    alive_players,
+)
 from src.game.strategy.builders.context_builder import (
     build_inference_user_context,
     build_speech_user_context,
+    build_vote_user_context,
 )
 from src.game.strategy.utils.logging_utils import log_self_belief_update
-from src.game.strategy.llm_schemas import PlayerMindsetModel, SelfBeliefModel
+from src.game.strategy.llm_schemas import (
+    PlayerMindsetModel,
+    SelfBeliefModel,
+    VoteDecisionModel,
+)
 from src.game.strategy.builders.prompt_builder import (
     format_inference_system_prompt,
     format_speech_system_prompt,
+    format_vote_system_prompt,
 )
 from src.game.strategy.utils.text_utils import sanitize_speech_output
 
@@ -180,3 +193,72 @@ def llm_generate_speech(
 
     raw_text = response.content if hasattr(response, "content") else response
     return sanitize_speech_output(raw_text)
+
+
+def llm_decide_vote(
+    llm_client: Any,
+    state: GameState,
+    me: str,
+    my_word: str,
+    current_mindset: PlayerMindset,
+) -> str:
+    """
+    Use LLM with voting tools to decide which player to vote for.
+
+    Args:
+        llm_client: Language model client
+        state: Current shared game state
+        me: Current player's ID
+        my_word: Player's assigned word
+        current_mindset: Player's latest mindset state
+
+    Returns:
+        Player ID selected as the vote target
+    """
+    tools = vote_tools(state)
+    response_format = ToolStrategy(
+        schema=VoteDecisionModel,
+        tool_message_content="Vote decision captured.",
+    )
+
+    agent = create_agent(
+        model=llm_client,
+        tools=tools,
+        response_format=response_format,
+    )
+
+    alive_now = alive_players(state)
+    system_prompt = format_vote_system_prompt(
+        my_word=my_word,
+        alive_count=len(alive_now),
+        current_round=state.get("current_round", 0),
+    )
+    vote_context = build_vote_user_context(
+        alive=alive_now,
+        me=me,
+        current_mindset=current_mindset,
+        current_round=state.get("current_round", 0),
+    )
+
+    try:
+        result = agent.invoke(
+            {
+                "messages": [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=vote_context),
+                ]
+            }
+        )
+        structured = result.get("structured_response")
+        if structured:
+            if not isinstance(structured, VoteDecisionModel):
+                structured = VoteDecisionModel.model_validate(structured)
+            return structured.target
+    except Exception as exc:
+        logger.exception("LLM vote decision failed: %s", exc)
+
+    # Fallback: choose the first other alive player or self if alone
+    alternatives = [pid for pid in alive_now if pid != me]
+    if alternatives:
+        return alternatives[0]
+    return me

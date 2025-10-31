@@ -31,3 +31,9 @@ class PlayerMindsetModel(BaseModel):
 
     self_belief: SelfBeliefModel
     suspicions: Dict[str, SuspicionModel] = Field(default_factory=dict)
+
+
+class VoteDecisionModel(BaseModel):
+    """Structured output model capturing a player's vote target."""
+
+    target: str = Field(..., description="ID of the player to vote for.")
