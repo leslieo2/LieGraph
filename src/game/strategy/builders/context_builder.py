@@ -5,21 +5,16 @@ Provides XML-based context formatting for inference and speech generation.
 """
 
 from html import escape
-from typing import List, Sequence, Dict, Any, cast
+from typing import List, Sequence, Dict, Any
 
-from src.game.state import Speech, PlayerMindset, SelfBelief, Suspicion
-from src.game.strategy.prompt_builder import determine_clarity
+from src.game.state import Speech, PlayerMindset, SelfBelief
+from src.game.strategy.builders.prompt_builder import determine_clarity
+from src.game.strategy.serialization import to_plain_dict
 
 
 def _as_mapping(value: Any) -> Dict[str, Any]:
     """Convert TypedDict/Pydantic objects into plain dictionaries."""
-    if value is None:
-        return {}
-    if hasattr(value, "model_dump"):
-        return cast(Dict[str, Any], value.model_dump())
-    if isinstance(value, dict):
-        return value
-    return cast(Dict[str, Any], dict(value))
+    return to_plain_dict(value, lambda: {})
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:

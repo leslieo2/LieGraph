@@ -4,9 +4,10 @@ Prompt engineering for LLM-powered game strategies.
 Manages all prompt templates and role-specific strategy determination.
 """
 
-from typing import Any, Dict, cast
+from typing import Dict
 
 from src.game.state import SelfBelief
+from src.game.strategy.serialization import to_plain_dict
 
 
 _INFERENCE_PROMPT_PREFIX = """You are a player in the game "Who is the Spy". Your goal is to analyze the game state and update your beliefs.
@@ -125,12 +126,10 @@ def determine_clarity(
 
 def format_speech_system_prompt(my_word: str, self_belief: SelfBelief) -> str:
     """Select the civilian or spy speech prompt based on calibrated confidence."""
-    if hasattr(self_belief, "model_dump"):
-        belief_dict = cast(Dict[str, Any], self_belief.model_dump())
-    elif isinstance(self_belief, dict):
-        belief_dict = self_belief
-    else:
-        belief_dict = cast(Dict[str, Any], dict(self_belief))
+    belief_dict = to_plain_dict(
+        self_belief,
+        lambda: {"role": "civilian", "confidence": 0.0},
+    )
 
     is_confident_spy = (
         belief_dict.get("role") == "spy"

@@ -2,11 +2,11 @@ from typing import Dict
 from unittest.mock import MagicMock, patch
 
 from src.game.strategy import llm_update_player_mindset
-from src.game.strategy.prompt_builder import (
+from src.game.strategy.builders.prompt_builder import (
     _INFERENCE_PROMPT_PREFIX,
     format_speech_system_prompt as _format_speech_system_prompt,
 )
-from src.game.strategy.context_builder import (
+from src.game.strategy.builders.context_builder import (
     build_inference_user_context as _build_inference_user_context,
     build_speech_user_context as _build_speech_user_context,
 )

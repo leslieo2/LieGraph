@@ -7,20 +7,18 @@ Provides structured logging for debugging AI agent belief evolution.
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, cast
+from typing import Any, Dict
 
 from src.game.state import SelfBelief
+from src.game.strategy.serialization import to_plain_dict
 
 
 def _belief_to_dict(belief: SelfBelief) -> Dict[str, Any]:
     """Convert belief data into a plain dictionary."""
-    if belief is None:
-        return {"role": "civilian", "confidence": 0.0}
-    if hasattr(belief, "model_dump"):
-        return cast(Dict[str, Any], belief.model_dump())
-    if isinstance(belief, dict):
-        return belief
-    return cast(Dict[str, Any], dict(belief))
+    return to_plain_dict(
+        belief,
+        lambda: {"role": "civilian", "confidence": 0.0},
+    )
 
 
 def log_self_belief_update(

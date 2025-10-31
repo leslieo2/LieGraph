@@ -13,17 +13,17 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
 from src.game.state import Speech, PlayerMindset, SelfBelief
-from src.game.strategy.context_builder import (
+from src.game.strategy.builders.context_builder import (
     build_inference_user_context,
     build_speech_user_context,
 )
-from src.game.strategy.logging_utils import log_self_belief_update
-from src.game.strategy.models import PlayerMindsetModel, SelfBeliefModel
-from src.game.strategy.prompt_builder import (
+from src.game.strategy.utils.logging_utils import log_self_belief_update
+from src.game.strategy.llm_schemas import PlayerMindsetModel, SelfBeliefModel
+from src.game.strategy.builders.prompt_builder import (
     format_inference_system_prompt,
     format_speech_system_prompt,
 )
-from src.game.strategy.text_utils import sanitize_speech_output
+from src.game.strategy.utils.text_utils import sanitize_speech_output
 
 
 def _to_mindset_model(

@@ -21,7 +21,7 @@ Integration Points:
 """
 
 from datetime import datetime
-from typing import Dict, Any, cast
+from typing import Dict, Any
 
 from src.tools.llm import create_llm
 from ..config import get_config
@@ -41,6 +41,7 @@ from ..strategy import (
     llm_update_player_mindset,
     llm_generate_speech,
 )
+from ..strategy.serialization import normalize_mindset, to_plain_dict
 
 
 def _get_llm_client():
@@ -50,23 +51,6 @@ def _get_llm_client():
     creating it only when needed and allowing for runtime configuration.
     """
     return create_llm()
-
-
-def _normalize_mindset(mindset: Any) -> PlayerMindset:
-    """Convert mindset objects (Pydantic or dict) into plain dict form."""
-    if mindset is None:
-        return {
-            "self_belief": {"role": "civilian", "confidence": 0.5},
-            "suspicions": {},
-        }
-
-    if hasattr(mindset, "model_dump"):
-        return cast(PlayerMindset, mindset.model_dump())
-
-    if isinstance(mindset, dict):
-        return cast(PlayerMindset, mindset)
-
-    return cast(PlayerMindset, dict(mindset))
 
 
 def _get_player_context(state: GameState, player_id: str):
@@ -100,8 +84,8 @@ def _create_player_private_state_delta(
     else:
         existing_player_mindset = private_state.get("playerMindset")
 
-    existing_state = _normalize_mindset(existing_player_mindset)
-    mindset_state = _normalize_mindset(updated_mindset)
+    existing_state = normalize_mindset(existing_player_mindset)
+    mindset_state = normalize_mindset(updated_mindset)
 
     new_suspicions = merge_probs(
         existing_state.get("suspicions", {}), mindset_state.get("suspicions", {})
@@ -144,7 +128,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     else:
         existing_player_mindset = private_state.get("playerMindset")
 
-    existing_player_mindset = _normalize_mindset(existing_player_mindset)
+    existing_player_mindset = normalize_mindset(existing_player_mindset)
 
     llm_client = _get_llm_client()
     updated_mindset = llm_update_player_mindset(
@@ -158,7 +142,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
         existing_player_mindset=existing_player_mindset,
     )
 
-    updated_mindset_state = _normalize_mindset(updated_mindset)
+    updated_mindset_state = normalize_mindset(updated_mindset)
 
     # Generate speech using LLM
     new_speech_text = llm_generate_speech(
@@ -215,7 +199,7 @@ def _decide_player_vote(
     3. Vote for player with the highest score
     """
 
-    mindset_state = _normalize_mindset(updated_mindset)
+    mindset_state = normalize_mindset(updated_mindset)
     alive = alive_players(state)
 
     # Determine own role: if confidence > 50%, use current role, otherwise use opposite
@@ -234,13 +218,7 @@ def _decide_player_vote(
         score = 0.0
         suspicion = suspicions.get(other_player_id)
         if suspicion:
-            if hasattr(suspicion, "model_dump"):
-                suspicion_data = suspicion.model_dump()
-            elif isinstance(suspicion, dict):
-                suspicion_data = suspicion
-            else:
-                suspicion_data = dict(suspicion)
-
+            suspicion_data = to_plain_dict(suspicion, lambda: {})
             suspicion_role = suspicion_data.get("role", "civilian")
             suspicion_conf = suspicion_data.get("confidence", 0.0)
             if my_role == suspicion_role:
@@ -295,7 +273,7 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     else:
         existing_player_mindset = private_state.get("playerMindset")
 
-    existing_player_mindset = _normalize_mindset(existing_player_mindset)
+    existing_player_mindset = normalize_mindset(existing_player_mindset)
 
     llm_client = _get_llm_client()
     updated_mindset = llm_update_player_mindset(
@@ -308,7 +286,7 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
         rules=config.get_game_rules(),
         existing_player_mindset=existing_player_mindset,
     )
-    updated_mindset_state = _normalize_mindset(updated_mindset)
+    updated_mindset_state = normalize_mindset(updated_mindset)
     # Decide the player's vote and infer PlayerMindset using LLM
     voted_target = _decide_player_vote(state, player_id, updated_mindset_state)
 
