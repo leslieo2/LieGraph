@@ -72,6 +72,7 @@ Must:
 - Stay concise: 18-35 characters for Chinese/Japanese/Korean, otherwise 20-40 words.
 Guide:
 - Follow the <strategy> tag in the <speech_context> tag to match the desired clarity for this turn.
+- Review the <planning> tag generated via the `plan_speech` tool and align your clue with its goal.
 - Use the confidence value in the <self> tag to decide how bold to be: higher confidence supports sharper differentiators, lower confidence favors safer overlaps.
 - Choose 2-3 aspects such as category, purpose, setting, sensory detail, or user.
 - Mirror the tone and vocabulary other players use.
@@ -89,6 +90,7 @@ Must:
 - Stay concise: 18-35 characters for Chinese/Japanese/Korean, otherwise 20-40 words.
 Guide:
 - Follow the <strategy> tag in the <speech_context> tag and mirror the group's clarity while masking differences.
+- Review the <planning> tag generated via the `plan_speech` tool and align your clue with its goal.
 - If you sense conflict with the group, emphasize broad categories, shared settings, or emotions instead of specifics.
 - Choose 2-3 aspects such as category, purpose, setting, sensory detail, or user that civilians might also mention.
 - Mirror the tone and vocabulary other players use.
