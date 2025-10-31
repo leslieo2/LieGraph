@@ -110,6 +110,8 @@ def determine_clarity(
     role: str, self_confidence: float, current_round: int
 ) -> tuple[str, str]:
     """Return role-aware clarity code and description for the current round."""
+    # TODO: When plan_speech fully controls clarity selection, collapse this helper
+    # into the planning workflow to avoid maintaining duplicate heuristics.
     if role == "spy" and self_confidence > 0.5:
         if current_round <= 2:
             return (
