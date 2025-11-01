@@ -14,7 +14,9 @@ LieGraph is a multi-agent implementation of the popular social deduction game "W
 - **Natural Language Interaction:** Agents communicate and reason in natural language throughout the game
 - **Probabilistic Belief System:** Sophisticated belief tracking with self-belief confidence and suspicions matrix
 - **Strategic Reasoning:** Advanced bluff detection, alliance formation, and long-term planning
+- **LLM-driven Strategy:** Structured tools for speech planning and voting decisions
 - **Built-in Metrics:** Automatic quality tracking for win balance, identification accuracy, and speech diversity with JSON reports for prompt evaluation workflows
+- **Historical Analysis:** CLI tools for aggregating and analyzing game metrics summaries
 
 ## 🚀 Quick Start
 
@@ -200,7 +202,9 @@ LieGraph/
 │   │   ├── state.py          # Game state definitions
 │   │   ├── nodes/            # Graph node implementations
 │   │   ├── rules.py          # Game logic and win conditions
-│   │   └── llm_strategy.py   # AI reasoning and speech generation
+│   │   ├── strategy/         # AI strategy coordination and builders
+│   │   ├── agent_tools/      # Structured tools for speech and voting
+│   │   └── metrics.py        # Game metrics and quality scoring
 ├── tests/                    # Pytest test suite
 ├── ui-web/frontend/          # React web interface
 └── config.yaml               # Game configuration

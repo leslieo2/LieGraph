@@ -37,6 +37,10 @@ LieGraph follows a **state machine architecture** built on LangGraph, with clear
 │  │  Identity       │  │  Speech         │  │   Voting    │  │
 │  │  Inference      │  │  Generation     │  │   Logic     │  │
 │  └─────────────────┘  └─────────────────┘  └─────────────┘  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
+│  │  Strategy       │  │   Speech        │  │   Vote      │  │
+│  │  Coordination   │  │    Tools        │  │   Tools     │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────┘  │
 ├─────────────────────────────────────────────────────────────┤
 │                 Configuration Layer                         │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
@@ -77,9 +81,18 @@ LieGraph follows a **state machine architecture** built on LangGraph, with clear
 - `merge_private_states`: Incremental mindset updates
 - `add`: Append-only operations for immutable records
 
-### 3. AI Strategy (`src/game/llm_strategy.py`)
+### 3. AI Strategy System (`src/game/strategy/`)
 
-**Purpose**: Implements intelligent agent behavior through LLM reasoning.
+**Purpose**: Implements intelligent agent behavior through LLM reasoning with structured tools.
+
+**Core Components**:
+- **Strategy Core (`strategy_core.py`)**: Main coordination for LLM-powered game intelligence
+- **Prompt Builders (`builders/`)**: Context and prompt builders for different game phases
+- **LLM Schemas (`llm_schemas.py`)**: Pydantic models for structured LLM outputs
+
+**Agent Tools (`src/game/agent_tools/`)**:
+- **Speech Tools (`speech_tools.py`)**: Structured reasoning for tone, clarity, and tactical focus
+- **Vote Tools (`vote_tools.py`)**: Evidence-based voting decisions with structured reasoning
 
 **Core Intelligence Systems**:
 - **Dynamic Identity Inference**: Real-time role analysis through conversation patterns
@@ -192,3 +205,20 @@ Next Round or Game End
 - **Immutable State**: Append-only records for critical game actions
 - **Error Recovery**: Checkpoint-based state recovery
 - **Validation**: Configuration and state validation at runtime
+
+## Recent Architectural Improvements
+
+### Enhanced Strategy System
+- **Modular Strategy Coordination**: Separated core coordination from prompt builders and LLM schemas
+- **Structured Agent Tools**: Dedicated tools for speech planning and voting decisions with structured reasoning
+- **Improved Serialization**: Enhanced serialization support across strategy modules
+
+### Metrics and Analysis
+- **Historical Aggregation**: CLI tools for aggregating and analyzing game metrics summaries
+- **Quality Scoring**: Deterministic and LLM-based quality evaluation methods
+- **Comprehensive Tracking**: Enhanced metrics collection with detailed game progression analysis
+
+### Development Experience
+- **Test Coverage**: Comprehensive test suite covering game rules, state management, nodes, and agent tools
+- **Code Organization**: Better separation between workflow orchestration and AI intelligence
+- **Error Handling**: Enhanced fallback mechanisms and error recovery strategies
