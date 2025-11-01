@@ -8,6 +8,7 @@ from ..rules import (
     calculate_eliminated_player,
     determine_winner,
 )
+from .helpers import get_assigned_word
 
 
 def host_setup(state: GameState) -> Dict[str, Any]:
@@ -29,9 +30,7 @@ def host_setup(state: GameState) -> Dict[str, Any]:
     print(f"🎮 Host: Initializing game, {len(player_list)} players")
     print(f"   Players: {player_list}")
     for player_id, private_state in assignments["player_private_states"].items():
-        assigned_word = getattr(private_state, "assigned_word", None)
-        if assigned_word is None and isinstance(private_state, dict):
-            assigned_word = private_state.get("assigned_word")
+        assigned_word = get_assigned_word(private_state)
         print(f"   Player {player_id}: Assigned word = {assigned_word}")
 
     metrics_collector.on_game_start(
