@@ -1,125 +1,212 @@
 """
 Configuration management for the LieGraph game.
 
-This module provides centralized configuration management for the game,
-including player settings, vocabulary, and game balancing rules.
+This module centralizes how configuration is loaded, validated, and exposed to
+the rest of the codebase. It now layers a user-provided ``config.yaml`` on top
+of built-in defaults and validates the merged result with Pydantic models so
+configuration errors surface with clear messages at startup.
 
-Features:
-- YAML-based configuration with sensible defaults
-- Player count validation and spy count calculation
-- Vocabulary management with word pairs
-- Name pool management for consistent player naming
-- Game rule configuration for LLM interactions
-
-Configuration Sources:
-- config.yaml file in project root (if exists)
-- Built-in defaults for development and testing
-- Runtime validation to ensure configuration integrity
-
-Game Balancing:
-- Automatic spy count calculation based on player count
-- Vocabulary validation and selection
-- Player name pool management
+Configuration precedence:
+1. Built-in defaults defined in ``DEFAULT_CONFIG``.
+2. Values provided in ``config.yaml`` (or a custom path passed to ``get_config``),
+   merged over the defaults.
+3. Pydantic model defaults for any fields still unset after the merge.
 """
 
-import os
-from typing import List, Tuple
+from __future__ import annotations
+
+from copy import deepcopy
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 import yaml
+from pydantic import BaseModel, Field, ValidationError, model_validator
+
+
+class ConfigurationError(RuntimeError):
+    """Raised when configuration cannot be loaded or validated."""
+
+
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "game": {
+        "player_count": 4,
+        "vocabulary": [
+            ["苹果", "香蕉"],
+            ["太阳", "月亮"],
+            ["猫", "够=狗"],
+            ["咖啡", "茶"],
+            ["笔记本电脑", "书"],
+        ],
+        "player_names": [
+            "Alice",
+            "Bob",
+            "Charlie",
+            "David",
+            "Eve",
+            "Frank",
+            "Grace",
+            "Henry",
+            "Ivy",
+            "Jack",
+            "Katherine",
+            "Leo",
+            "Mia",
+            "Noah",
+            "Olivia",
+            "Peter",
+            "Quinn",
+            "Rachel",
+            "Sam",
+            "Tina",
+        ],
+        "settings": {"min_players": 3, "max_players": 8, "max_rounds": 5},
+    }
+}
+
+
+def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merge two dictionaries without mutating the inputs."""
+    result: Dict[str, Any] = {}
+    for key in base.keys() | overrides.keys():
+        base_value = base.get(key)
+        override_value = overrides.get(key)
+
+        if isinstance(base_value, dict) and isinstance(override_value, dict):
+            result[key] = _deep_merge(base_value, override_value)
+        elif override_value is not None:
+            result[key] = override_value
+        else:
+            result[key] = deepcopy(base_value)
+    return result
+
+
+def _load_yaml(path: Path) -> Dict[str, Any]:
+    """Load YAML data from the provided path."""
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except yaml.YAMLError as exc:
+        raise ConfigurationError(
+            f"Failed to parse configuration file at {path}: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise ConfigurationError(
+            f"Configuration file at {path} must contain a top-level mapping."
+        )
+
+    return data
+
+
+class GameSettingsModel(BaseModel):
+    """Pydantic model for the game.settings section."""
+
+    min_players: int = Field(default=3, ge=1)
+    max_players: int = Field(default=8, ge=1)
+    max_rounds: int = Field(default=5, ge=1)
+
+    @model_validator(mode="after")
+    def validate_limits(self) -> "GameSettingsModel":
+        if self.min_players > self.max_players:
+            raise ValueError("min_players cannot exceed max_players")
+        return self
+
+
+class GameModel(BaseModel):
+    """Pydantic model for the game section."""
+
+    player_count: int = Field(default=4, ge=1)
+    vocabulary: List[Tuple[str, str]] = Field(default_factory=list)
+    player_names: List[str] = Field(default_factory=list)
+    settings: GameSettingsModel = Field(default_factory=GameSettingsModel)
+
+    @model_validator(mode="after")
+    def validate_game(self) -> "GameModel":
+        if not self.vocabulary:
+            raise ValueError("Vocabulary list cannot be empty")
+        for entry in self.vocabulary:
+            if len(entry) != 2 or any(
+                not isinstance(word, str) or not word for word in entry
+            ):
+                raise ValueError(
+                    "Each vocabulary pair must contain two non-empty strings"
+                )
+
+        unique_names = set(self.player_names)
+        if len(unique_names) != len(self.player_names):
+            raise ValueError("Player names must be unique")
+        if len(self.player_names) < self.player_count:
+            raise ValueError(
+                "Player name pool is smaller than the configured player count"
+            )
+
+        if (
+            not self.settings.min_players
+            <= self.player_count
+            <= self.settings.max_players
+        ):
+            raise ValueError(
+                "player_count must be between min_players and max_players (inclusive)"
+            )
+        return self
+
+
+class ProjectConfigModel(BaseModel):
+    """Top-level Pydantic model for project configuration."""
+
+    game: GameModel = Field(default_factory=GameModel)
 
 
 class GameConfig:
     """Configuration class for the LieGraph game."""
 
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: str | Path | None = None):
         """
         Initialize configuration.
 
         Args:
             config_path: Path to YAML configuration file. If None, uses defaults.
         """
-        self.config_path = config_path
+        self.config_path = Path(config_path).expanduser() if config_path else None
         self._config = self._load_config()
 
-    def _load_config(self) -> dict:
-        """Load configuration from file or use defaults."""
-        if self.config_path and os.path.exists(self.config_path):
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f)
-        else:
-            # Return default configuration
-            return self._get_default_config()
+    def _load_config(self) -> ProjectConfigModel:
+        """Load configuration from file, merge with defaults, and validate."""
+        user_config: Dict[str, Any] = {}
 
-    @staticmethod
-    def _get_default_config() -> dict:
-        """Get default configuration."""
-        return {
-            "game": {
-                "player_count": 4,
-                "vocabulary": [
-                    ["苹果", "香蕉"],
-                    ["太阳", "月亮"],
-                    ["猫", "够=狗"],
-                    ["咖啡", "茶"],
-                    ["笔记本电脑", "书"],
-                ],
-                "player_names": [
-                    "Alice",
-                    "Bob",
-                    "Charlie",
-                    "David",
-                    "Eve",
-                    "Frank",
-                    "Grace",
-                    "Henry",
-                    "Ivy",
-                    "Jack",
-                    "Katherine",
-                    "Leo",
-                    "Mia",
-                    "Noah",
-                    "Olivia",
-                    "Peter",
-                    "Quinn",
-                    "Rachel",
-                    "Sam",
-                    "Tina",
-                ],
-                "settings": {"min_players": 3, "max_players": 8, "max_rounds": 5},
-            }
-        }
+        if self.config_path and self.config_path.exists():
+            user_config = _load_yaml(self.config_path)
+
+        merged = _deep_merge(deepcopy(DEFAULT_CONFIG), user_config)
+
+        try:
+            return ProjectConfigModel.model_validate(merged)
+        except ValidationError as exc:
+            detail = exc.errors()
+            location = self.config_path or "built-in defaults"
+            raise ConfigurationError(
+                f"Invalid configuration in {location}: {detail}"
+            ) from exc
 
     @property
     def player_count(self) -> int:
         """Get the configured number of players."""
-        count = self._config["game"]["player_count"]
-        min_players = self._config["game"]["settings"]["min_players"]
-        max_players = self._config["game"]["settings"]["max_players"]
-
-        # Validate player count
-        if count < min_players:
-            raise ValueError(f"Player count must be at least {min_players}")
-        if count > max_players:
-            raise ValueError(f"Player count cannot exceed {max_players}")
-
-        return count
+        return self._config.game.player_count
 
     @property
     def vocabulary(self) -> List[Tuple[str, str]]:
         """Get the vocabulary list."""
-        vocab_list = self._config["game"]["vocabulary"]
-        # Convert to tuples for consistency
-        return [tuple(pair) for pair in vocab_list]
+        return [tuple(pair) for pair in self._config.game.vocabulary]
 
     @property
     def player_names_pool(self) -> List[str]:
         """Get the pool of available player names."""
-        return self._config["game"]["player_names"]
+        return list(self._config.game.player_names)
 
     @property
     def max_rounds(self) -> int:
         """Get the maximum number of rounds per game."""
-        return self._config["game"]["settings"]["max_rounds"]
+        return self._config.game.settings.max_rounds
 
     def get_game_rules(self) -> dict:
         """
@@ -135,49 +222,36 @@ class GameConfig:
         """
         Generate player names based on configured player count.
         Returns consistent results by selecting names in order.
-
-        Returns:
-            List of unique player names
         """
         count = self.player_count
-        available_names = self.player_names_pool.copy()
+        available_names = self.player_names_pool
 
         if count > len(available_names):
             raise ValueError(
                 f"Cannot generate {count} unique names from pool of {len(available_names)} names"
             )
 
-        # Select names in order for consistent results
-        selected_names = available_names[:count]
-        return selected_names
+        return available_names[:count]
 
     def validate_config(self) -> bool:
         """Validate the configuration."""
         try:
-            # Test player count validation
             _ = self.player_count
-
-            # Test vocabulary
-            vocab = self.vocabulary
-            if not vocab:
-                raise ValueError("Vocabulary list cannot be empty")
-
-            # Test name generation
+            _ = self.vocabulary
             names = self.generate_player_names()
             if len(names) != self.player_count:
                 raise ValueError("Name generation failed")
-
             return True
-        except Exception as e:
-            print(f"Configuration validation failed: {e}")
+        except Exception as exc:
+            print(f"Configuration validation failed: {exc}")
             return False
 
 
 # Global configuration instance
-_config_instance: GameConfig = None
+_config_instance: GameConfig | None = None
 
 
-def get_config(config_path: str = None) -> GameConfig:
+def get_config(config_path: str | Path | None = None) -> GameConfig:
     """
     Get the global configuration instance.
 
@@ -191,16 +265,15 @@ def get_config(config_path: str = None) -> GameConfig:
 
     if _config_instance is None:
         if config_path is None:
-            # Try to find config.yaml in project root
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            config_path = os.path.join(project_root, "config.yaml")
+            project_root = Path(__file__).resolve().parents[2]
+            config_path = project_root / "config.yaml"
 
         _config_instance = GameConfig(config_path)
 
     return _config_instance
 
 
-def reload_config(config_path: str = None) -> GameConfig:
+def reload_config(config_path: str | Path | None = None) -> GameConfig:
     """
     Reload the configuration from file.
 
