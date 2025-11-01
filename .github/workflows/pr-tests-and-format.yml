@@ -4,23 +4,48 @@ on:
   pull_request:
 
 jobs:
-  lint-and-test:
+  test-backend:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up uv
         uses: astral-sh/setup-uv@v2
         with:
           python-version: "3.12"
-          cache: true
-
       - name: Install dependencies
         run: uv sync --frozen
+      - name: Run pytest
+        run: uv run pytest
 
+  lint-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --frozen
       - name: Check formatting with Black
         run: uv run black . --check
 
-      - name: Run pytest
-        run: uv run pytest
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+      - name: Cache Node.js modules
+        uses: actions/cache@v4
+        with:
+          path: ui-web/frontend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('ui-web/frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Install frontend dependencies
+        run: npm install --prefix ui-web/frontend
+      - name: Build frontend
+        run: npm run build --prefix ui-web/frontend
