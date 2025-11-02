@@ -60,7 +60,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "Tina",
         ],
         "settings": {"min_players": 3, "max_players": 8, "max_rounds": 5},
-    }
+    },
+    "metrics": {"enabled": False},
 }
 
 
@@ -151,10 +152,17 @@ class GameModel(BaseModel):
         return self
 
 
+class MetricsConfigModel(BaseModel):
+    """Configuration for optional metrics collection."""
+
+    enabled: bool = False
+
+
 class ProjectConfigModel(BaseModel):
     """Top-level Pydantic model for project configuration."""
 
     game: GameModel = Field(default_factory=GameModel)
+    metrics: MetricsConfigModel = Field(default_factory=MetricsConfigModel)
 
 
 class GameConfig:
@@ -207,6 +215,11 @@ class GameConfig:
     def max_rounds(self) -> int:
         """Get the maximum number of rounds per game."""
         return self._config.game.settings.max_rounds
+
+    @property
+    def metrics_enabled(self) -> bool:
+        """Return whether metrics collection is enabled."""
+        return self._config.metrics.enabled
 
     def get_game_rules(self) -> dict:
         """

@@ -45,3 +45,7 @@ game:
     max_players: 8
     # Maximum number of rounds per game
     max_rounds: 8
+
+metrics:
+  # Toggle metrics collection; when false, all metric hooks are no-ops
+  enabled: false
