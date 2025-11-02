@@ -14,7 +14,8 @@ from .helpers import get_assigned_word
 def host_setup(state: GameState) -> Dict[str, Any]:
     """Initializes the game, assigning roles and words."""
     config = get_config()
-    metrics_collector.set_enabled(config.metrics_enabled)
+    desired_state = config.metrics_enabled or metrics_collector.enabled
+    metrics_collector.set_enabled(desired_state)
 
     player_list = state.get("players")
 
