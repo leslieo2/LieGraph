@@ -13,10 +13,12 @@ from .helpers import get_assigned_word
 
 def host_setup(state: GameState) -> Dict[str, Any]:
     """Initializes the game, assigning roles and words."""
+    config = get_config()
+    metrics_collector.set_enabled(config.metrics_enabled)
+
     player_list = state.get("players")
 
     if not player_list:
-        config = get_config()
         player_list = config.generate_player_names()
 
     # Pass the existing host_private_state to assign_roles_and_words

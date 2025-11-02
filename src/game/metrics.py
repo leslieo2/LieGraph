@@ -120,7 +120,7 @@ def _suspicion_to_dict(suspicion: Any) -> Dict[str, Any]:
 class GameMetrics:
     """Collects per-game data and produces aggregate scores."""
 
-    def __init__(self, *, enabled: bool = True) -> None:
+    def __init__(self, *, enabled: bool = False) -> None:
         self.completed_games: List[Dict[str, Any]] = []
         self.win_counts: Counter[str] = Counter()
         self._active_games: Dict[str, Dict[str, Any]] = {}
@@ -692,18 +692,7 @@ class GameMetrics:
 
 
 # Global collector used by the rest of the codebase.
-
-
-def _default_metrics_enabled() -> bool:
-    try:
-        from .config import get_config
-
-        return bool(get_config().metrics_enabled)
-    except Exception:
-        return False
-
-
-metrics_collector = GameMetrics(enabled=_default_metrics_enabled())
+metrics_collector = GameMetrics()
 
 MULTILINGUAL_VOCABULARY_BATCH: List[tuple[str, tuple[str, str]]] = [
     ("english", ("lighthouse", "windmill")),
