@@ -13,10 +13,13 @@ from .helpers import get_assigned_word
 
 def host_setup(state: GameState) -> Dict[str, Any]:
     """Initializes the game, assigning roles and words."""
+    config = get_config()
+    desired_state = config.metrics_enabled or metrics_collector.enabled
+    metrics_collector.set_enabled(desired_state)
+
     player_list = state.get("players")
 
     if not player_list:
-        config = get_config()
         player_list = config.generate_player_names()
 
     # Pass the existing host_private_state to assign_roles_and_words
@@ -33,11 +36,12 @@ def host_setup(state: GameState) -> Dict[str, Any]:
         assigned_word = get_assigned_word(private_state)
         print(f"   Player {player_id}: Assigned word = {assigned_word}")
 
-    metrics_collector.on_game_start(
-        game_id=state.get("game_id"),
-        players=player_list,
-        player_roles=assignments["host_private_state"]["player_roles"],
-    )
+    if metrics_collector.enabled:
+        metrics_collector.on_game_start(
+            game_id=state.get("game_id"),
+            players=player_list,
+            player_roles=assignments["host_private_state"]["player_roles"],
+        )
 
     # These private states will be merged by the graph runner
     game_setup_state = {
@@ -104,10 +108,11 @@ def host_result(state: GameState) -> Dict[str, Any]:
 
     if winner:
         print(f"🎮 Host announces result: Game over! Winner: {winner}")
-        metrics_collector.on_game_end(
-            game_id=state.get("game_id"),
-            winner=winner,
-        )
+        if metrics_collector.enabled:
+            metrics_collector.on_game_end(
+                game_id=state.get("game_id"),
+                winner=winner,
+            )
         update = {"game_phase": "result", "winner": winner}
         if eliminated_player:
             update["eliminated_players"] = [eliminated_player]

@@ -120,20 +120,48 @@ def _suspicion_to_dict(suspicion: Any) -> Dict[str, Any]:
 class GameMetrics:
     """Collects per-game data and produces aggregate scores."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, enabled: bool = False) -> None:
         self.completed_games: List[Dict[str, Any]] = []
         self.win_counts: Counter[str] = Counter()
         self._active_games: Dict[str, Dict[str, Any]] = {}
         self._output_dir = BASE_DIR / "logs" / "metrics"
-        self._output_dir.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
+        self._enabled = enabled
+
+        if self._enabled:
+            self._ensure_output_dir()
+
+    def _ensure_output_dir(self) -> None:
+        """Ensure the metrics output directory exists."""
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _clear_state(self) -> None:
+        """Internal helper to clear tracked state."""
+        self.completed_games.clear()
+        self.win_counts.clear()
+        self._active_games.clear()
+
+    @property
+    def enabled(self) -> bool:
+        """Return whether metrics collection is active."""
+        return self._enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        """Toggle metrics collection on or off."""
+        with self._lock:
+            if self._enabled == enabled:
+                return
+
+            self._enabled = enabled
+            if enabled:
+                self._ensure_output_dir()
+            else:
+                self._clear_state()
 
     def reset(self) -> None:
         """Reset all in-memory aggregates for a fresh metrics run."""
         with self._lock:
-            self.completed_games.clear()
-            self.win_counts.clear()
-            self._active_games.clear()
+            self._clear_state()
 
     def _resolve_game_key(self, game_id: str | None) -> Optional[str]:
         """Resolve a game identifier within a locked context."""
@@ -155,6 +183,9 @@ class GameMetrics:
         player_roles: Dict[str, str],
     ) -> None:
         """Initialize collectors for a new game."""
+        if not self._enabled:
+            return
+
         if not players or not player_roles:
             return
 
@@ -184,6 +215,9 @@ class GameMetrics:
         mindset: PlayerMindset,
     ) -> None:
         """Record identification accuracy as players update their mindset."""
+        if not self._enabled:
+            return
+
         with self._lock:
             game_key = self._resolve_game_key(game_id)
             if game_key is None:
@@ -244,6 +278,9 @@ class GameMetrics:
         content: str,
     ) -> None:
         """Capture lexical diversity for each speech."""
+        if not self._enabled:
+            return
+
         with self._lock:
             game_key = self._resolve_game_key(game_id)
             if game_key is None:
@@ -271,6 +308,9 @@ class GameMetrics:
 
     def on_game_end(self, *, game_id: str | None, winner: str | None) -> None:
         """Finalize metrics for the current game."""
+        if not self._enabled:
+            return
+
         with self._lock:
             game_key = self._resolve_game_key(game_id)
             if game_key is None:
@@ -597,6 +637,7 @@ class GameMetrics:
         return {"input": content}
 
     def _persist_game_summary(self, summary: Dict[str, Any]) -> None:
+        self._ensure_output_dir()
         game_id = summary.get("game_id") or f"game-{len(self.completed_games)}"
         path = self._output_dir / f"{game_id}.json"
         payload = {"summary": summary}
@@ -604,6 +645,7 @@ class GameMetrics:
             json.dump(payload, fp, ensure_ascii=False, indent=2)
 
     def _persist_overall_metrics(self) -> None:
+        self._ensure_output_dir()
         path = self._output_dir / "overall.json"
         summary = self.get_overall_metrics()
         score = self._compute_functional_score(summary)
@@ -710,6 +752,8 @@ def run_multilingual_metrics_batch(
 
     from .config import get_config
 
+    previous_state = metrics_collector.enabled
+    metrics_collector.set_enabled(True)
     metrics_collector.reset()
 
     config = get_config()
@@ -750,7 +794,9 @@ def run_multilingual_metrics_batch(
     print("\nQuality score:")
     print(json.dumps(quality_score, ensure_ascii=False, indent=2))
 
-    return {"metrics": overall_metrics, "quality_score": quality_score}
+    result = {"metrics": overall_metrics, "quality_score": quality_score}
+    metrics_collector.set_enabled(previous_state)
+    return result
 
 
 def load_saved_game_summaries(
