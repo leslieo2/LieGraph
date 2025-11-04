@@ -186,6 +186,10 @@ score = metrics_collector.compute_quality_score()  # deterministic
 
 These outputs are ready to feed into downstream prompt-evaluation or offline analysis pipelines.
 
+## 🔗 Related Projects
+
+- [LangGraph Mastery Playbook](https://github.com/leslieo2/LangGraph-Mastery-Playbook): A six-stage LangGraph curriculum of runnable Python modules that takes you from foundational graph patterns to production-ready retrieval systems.
+
 ### Metrics Progress
 
 - Maintain a running ledger in [`docs/metrics-history.md`](docs/metrics-history.md) so prompt and strategy changes can be tracked against key metrics.

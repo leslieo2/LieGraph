@@ -187,6 +187,10 @@ score = metrics_collector.compute_quality_score()  # 函数评分
 
 这些数据可作为后续提示词评估或离线分析的直接输入。
 
+## 🔗 相关项目
+
+- [LangGraph Mastery Playbook](https://github.com/leslieo2/LangGraph-Mastery-Playbook)：一个六阶段的 LangGraph 深度学习路径，提供可直接运行的 Python 模块，帮助你从基础图构建到生产级检索管线循序提升技能。
+
 ### 指标进展
 
 - 在 [`docs/metrics-history.md`](docs/metrics-history.md) 中持续追加每次跑批后的关键指标，方便对照提示词或策略的改动。
