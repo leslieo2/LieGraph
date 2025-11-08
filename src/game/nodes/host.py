@@ -1,7 +1,5 @@
-from typing import Dict, Any, cast
+from typing import Dict, Any, cast, TYPE_CHECKING
 
-from ..config import get_config
-from ..metrics import metrics_collector
 from ..state import GameState, next_alive_player, generate_phase_id
 from ..rules import (
     assign_roles_and_words,
@@ -11,25 +9,32 @@ from ..rules import (
 from ..logger import get_logger
 from .helpers import get_assigned_word
 
+if TYPE_CHECKING:
+    from ..config import GameConfig
+    from ..metrics import GameMetrics
+
 logger = get_logger(__name__)
 
 
-def host_setup(state: GameState) -> Dict[str, Any]:
+def host_setup(
+    state: GameState, *, game_config: "GameConfig", metrics: "GameMetrics"
+) -> Dict[str, Any]:
     """Initializes the game, assigning roles and words."""
-    config = get_config()
-    desired_state = config.metrics_enabled or metrics_collector.enabled
-    metrics_collector.set_enabled(desired_state)
+    desired_state = game_config.metrics_enabled or metrics.enabled
+    metrics.set_enabled(desired_state)
 
     player_list = state.get("players")
 
     if not player_list:
-        player_list = config.generate_player_names()
+        player_list = game_config.generate_player_names()
 
     # Pass the existing host_private_state to assign_roles_and_words
     # This allows custom words from frontend to be used if provided
     host_private_state = state.get("host_private_state", {})
     assignments = assign_roles_and_words(
-        player_list, host_private_state=host_private_state
+        player_list,
+        word_list=game_config.vocabulary,
+        host_private_state=host_private_state,
     )
 
     logger.info("Host initializing game with %d players", len(player_list))
@@ -38,8 +43,8 @@ def host_setup(state: GameState) -> Dict[str, Any]:
         assigned_word = get_assigned_word(private_state)
         logger.debug("Assigned word for %s: %s", player_id, assigned_word)
 
-    if metrics_collector.enabled:
-        metrics_collector.on_game_start(
+    if metrics.enabled:
+        metrics.on_game_start(
             game_id=state.get("game_id"),
             players=player_list,
             player_roles=assignments["host_private_state"]["player_roles"],
@@ -86,7 +91,7 @@ def host_stage_switch(state: GameState) -> Dict[str, Any]:
     return {}
 
 
-def host_result(state: GameState) -> Dict[str, Any]:
+def host_result(state: GameState, *, metrics: "GameMetrics") -> Dict[str, Any]:
     """
     Calculates the result of a round, eliminates a player, and checks for a winner.
     This node is the aggregation point after voting.
@@ -112,8 +117,8 @@ def host_result(state: GameState) -> Dict[str, Any]:
 
     if winner:
         logger.info("Winner determined: %s", winner)
-        if metrics_collector.enabled:
-            metrics_collector.on_game_end(
+        if metrics.enabled:
+            metrics.on_game_end(
                 game_id=state.get("game_id"),
                 winner=winner,
             )

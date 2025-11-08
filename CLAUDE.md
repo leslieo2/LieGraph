@@ -155,13 +155,16 @@ START → host_setup → host_stage_switch
 
 **Quality Scoring**:
 ```python
-from src.game.metrics import metrics_collector
+from src.game.dependencies import build_dependencies
+
+deps = build_dependencies()
+collector = deps.metrics
 
 # Get quality score
-deterministic_score = metrics_collector.compute_quality_score()
+deterministic_score = collector.compute_quality_score()
 
 # Or use LLM-based evaluation
-llm_score = metrics_collector.compute_quality_score(method="llm", llm=client)
+llm_score = collector.compute_quality_score(method="llm", llm=client)
 ```
 
 **Metrics History**: Track prompts and configurations in `docs/metrics-history.md`
@@ -194,8 +197,8 @@ llm_score = metrics_collector.compute_quality_score(method="llm", llm=client)
 
 ### Working with Player-Specific Hooks (callbacks) for Metrics
 When implementing player-specific behaviors that need to track metrics per player:
-- Use the `metrics_collector.on_player_speech(player_name, is_spy, round_num, speech)` hook within player speech nodes to collect speech diversity metrics
-- Use the `metrics_collector.on_vote_cast()` hook in player vote nodes to collect voting pattern data.
+- Access the injected collector via the dependencies bundle (e.g., the `metrics` argument supplied to LangGraph nodes).
+- Use the `metrics.on_player_speech()` and related hooks within player speech/vote nodes to collect lexical diversity and voting pattern data.
 - Metrics collection respects the `metrics.enabled` flag in `config.yaml` and will be no-ops when metrics are disabled.
 
 ## LangGraph Development Notes

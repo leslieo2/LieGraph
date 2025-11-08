@@ -174,14 +174,18 @@ Metrics are streamed to memory during play and automatically persisted when a ga
 - Per-game summaries: `logs/metrics/{game_id}.json`
 - Rolling aggregate + functional quality score: `logs/metrics/overall.json`
 
-You can also access the live collector from code:
+You can also access the live collector from code by building a dependency bundle
+for each game instance:
 
 ```python
-from src.game.metrics import metrics_collector
+from src.game.dependencies import build_dependencies
 
-audit = metrics_collector.get_overall_metrics()
-score = metrics_collector.compute_quality_score()  # deterministic
-# metrics_collector.compute_quality_score(method="llm", llm=client) for LLM-based review
+deps = build_dependencies()
+collector = deps.metrics
+
+audit = collector.get_overall_metrics()
+score = collector.compute_quality_score()  # deterministic
+# collector.compute_quality_score(method="llm", llm=client) for LLM-based review
 ```
 
 These outputs are ready to feed into downstream prompt-evaluation or offline analysis pipelines.

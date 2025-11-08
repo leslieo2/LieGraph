@@ -24,21 +24,12 @@ from typing import Any, Dict, Iterable, List, Optional, cast
 
 import json
 import re
-import sys
 from argparse import ArgumentParser
 from pathlib import Path
 from threading import Lock
 
 from .logger import get_logger
 from .state import PlayerMindset
-
-
-if __name__ == "__main__":
-    # When executed as a script (e.g. `python -m src.game.metrics`), ensure
-    # the canonical package-qualified module name shares the same module
-    # instance so that imports like `from ..metrics import metrics_collector`
-    # reference the identical singleton.
-    sys.modules.setdefault("src.game.metrics", sys.modules[__name__])
 
 
 def _safe_mean(values: Iterable[Optional[float]]) -> Optional[float]:
@@ -693,8 +684,6 @@ class GameMetrics:
         return {"metrics": metrics, "quality_score": quality_score}
 
 
-# Global collector used by the rest of the codebase.
-metrics_collector = GameMetrics()
 logger = get_logger(__name__)
 
 MULTILINGUAL_VOCABULARY_BATCH: List[tuple[str, tuple[str, str]]] = [
@@ -712,6 +701,8 @@ def _run_single_multilingual_game(
     language_tag: str,
     civilian_word: str,
     spy_word: str,
+    collector: "GameMetrics",
+    config: "GameConfig",
 ) -> None:
     """Execute a single multilingual game with the provided vocabulary pair."""
 
@@ -721,7 +712,11 @@ def _run_single_multilingual_game(
     from .graph import build_workflow_with_players
 
     player_list = list(players)
-    app = build_workflow_with_players(player_list)
+    app = build_workflow_with_players(
+        player_list,
+        config=config,
+        metrics=collector,
+    )
 
     game_id = f"metrics-{idx}-{language_tag}"
     logger.info(
@@ -751,7 +746,11 @@ def _run_single_multilingual_game(
 
 
 def run_multilingual_metrics_batch(
-    *, concurrent: bool = False, max_workers: Optional[int] = None
+    *,
+    concurrent: bool = False,
+    max_workers: Optional[int] = None,
+    config: "GameConfig | None" = None,
+    metrics: "GameMetrics | None" = None,
 ) -> Dict[str, Any]:
     """Run five games over distinct vocabulary pairs and log resulting metrics.
 
@@ -761,14 +760,16 @@ def run_multilingual_metrics_batch(
             running concurrently. Defaults to the number of vocabulary pairs.
     """
 
-    from .config import get_config
+    from .config import load_config
 
-    previous_state = metrics_collector.enabled
-    metrics_collector.set_enabled(True)
-    metrics_collector.reset()
+    collector = metrics or GameMetrics()
 
-    config = get_config()
-    players = tuple(config.generate_player_names())
+    previous_state = collector.enabled
+    collector.set_enabled(True)
+    collector.reset()
+
+    cfg = config or load_config()
+    players = tuple(cfg.generate_player_names())
     batch = list(MULTILINGUAL_VOCABULARY_BATCH)
 
     if concurrent:
@@ -784,6 +785,8 @@ def run_multilingual_metrics_batch(
                     language_tag,
                     civilian_word,
                     spy_word,
+                    collector,
+                    cfg,
                 )
                 for idx, (language_tag, (civilian_word, spy_word)) in enumerate(
                     batch, start=1
@@ -794,11 +797,17 @@ def run_multilingual_metrics_batch(
     else:
         for idx, (language_tag, (civilian_word, spy_word)) in enumerate(batch, start=1):
             _run_single_multilingual_game(
-                players, idx, language_tag, civilian_word, spy_word
+                players,
+                idx,
+                language_tag,
+                civilian_word,
+                spy_word,
+                collector,
+                cfg,
             )
 
-    overall_metrics = metrics_collector.get_overall_metrics()
-    quality_score = metrics_collector.compute_quality_score()
+    overall_metrics = collector.get_overall_metrics()
+    quality_score = collector.compute_quality_score()
 
     logger.info(
         "Overall metrics:\n%s",
@@ -809,7 +818,7 @@ def run_multilingual_metrics_batch(
     )
 
     result = {"metrics": overall_metrics, "quality_score": quality_score}
-    metrics_collector.set_enabled(previous_state)
+    collector.set_enabled(previous_state)
     return result
 
 
@@ -943,7 +952,6 @@ if __name__ == "__main__":
 
 __all__ = [
     "GameMetrics",
-    "metrics_collector",
     "MULTILINGUAL_VOCABULARY_BATCH",
     "run_multilingual_metrics_batch",
     "load_saved_game_summaries",

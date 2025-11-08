@@ -8,7 +8,7 @@ configuration errors surface with clear messages at startup.
 
 Configuration precedence:
 1. Built-in defaults defined in ``DEFAULT_CONFIG``.
-2. Values provided in ``config.yaml`` (or a custom path passed to ``get_config``),
+2. Values provided in ``config.yaml`` (or a custom path passed to ``load_config``),
    merged over the defaults.
 3. Pydantic model defaults for any fields still unset after the merge.
 """
@@ -262,46 +262,33 @@ class GameConfig:
             return False
 
 
-# Global configuration instance
-_config_instance: GameConfig | None = None
 logger = get_logger(__name__)
 
 
-def get_config(config_path: str | Path | None = None) -> GameConfig:
+def default_config_path() -> Path:
+    """Return the default config file location inside the repository."""
+    return Path(__file__).resolve().parents[2] / "config.yaml"
+
+
+def load_config(config_path: str | Path | None = None) -> GameConfig:
     """
-    Get the global configuration instance.
+    Build a new GameConfig instance from the provided path.
 
     Args:
-        config_path: Path to configuration file. If None, uses default location.
-
-    Returns:
-        GameConfig instance
+        config_path: Optional override path. When omitted, uses ``config.yaml`` at
+            the project root.
     """
-    global _config_instance
-
-    if _config_instance is None:
-        if config_path is None:
-            project_root = Path(__file__).resolve().parents[2]
-            config_path = project_root / "config.yaml"
-
-        _config_instance = GameConfig(config_path)
-
-    return _config_instance
+    resolved_path = (
+        Path(config_path).expanduser() if config_path else default_config_path()
+    )
+    return GameConfig(resolved_path)
 
 
 def reload_config(config_path: str | Path | None = None) -> GameConfig:
     """
-    Reload the configuration from file.
-
-    Args:
-        config_path: Path to configuration file. If None, uses default location.
-
-    Returns:
-        GameConfig instance
+    Compatibility shim for legacy callers. Returns a freshly loaded config.
     """
-    global _config_instance
-    _config_instance = None
-    return get_config(config_path)
+    return load_config(config_path)
 
 
 def calculate_spy_count(total_players: int) -> int:

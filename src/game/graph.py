@@ -32,9 +32,24 @@ from src.game.nodes.player import player_speech, player_vote
 from src.game.nodes.transition import check_votes_and_transition
 from src.game.state import GameState, votes_ready, next_alive_player
 from src.tools import save_graph_image
-from src.game.config import get_config
+from src.game.dependencies import GameDependencies, build_dependencies
 
 logger = get_logger(__name__)
+
+
+def _resolve_dependencies(
+    *,
+    dependencies: GameDependencies | None = None,
+    config=None,
+    metrics=None,
+) -> GameDependencies:
+    if dependencies is not None and (config is not None or metrics is not None):
+        raise ValueError(
+            "Provide either `dependencies` or individual `config`/`metrics`, not both."
+        )
+    if dependencies is not None:
+        return dependencies
+    return build_dependencies(config=config, metrics=metrics)
 
 
 def route_from_stage(state: GameState) -> list[str] | str:
@@ -84,7 +99,14 @@ def should_continue(state: GameState) -> str:
     return "end" if state.get("winner") else "continue"
 
 
-def build_workflow_with_players(players: list[str], *, checkpointer=None):
+def build_workflow_with_players(
+    players: list[str],
+    *,
+    dependencies: GameDependencies | None = None,
+    config=None,
+    metrics=None,
+    checkpointer=None,
+):
     """Build the complete LangGraph workflow for a specific set of players.
 
     This function constructs the entire state machine with all nodes and edges
@@ -102,20 +124,46 @@ def build_workflow_with_players(players: list[str], *, checkpointer=None):
         - Player nodes: speech and vote nodes for each player
         - Transition nodes: vote counting and phase transitions
     """
+    deps = _resolve_dependencies(
+        dependencies=dependencies,
+        config=config,
+        metrics=metrics,
+    )
+    cfg = deps.config
+    collector = deps.metrics
+
     workflow = StateGraph(GameState)
 
     # Register nodes
-    workflow.add_node("host_setup", host_setup)
+    workflow.add_node(
+        "host_setup", partial(host_setup, game_config=cfg, metrics=collector)
+    )
     workflow.add_node(
         "host_stage_switch", host_stage_switch
     )  # Responsible for writing phase/next_* pointers
-    workflow.add_node("host_result", host_result)
+    workflow.add_node("host_result", partial(host_result, metrics=collector))
 
     workflow.add_node("check_votes_and_transition", check_votes_and_transition)
 
     for pid in players:
-        workflow.add_node(f"player_speech_{pid}", partial(player_speech, player_id=pid))
-        workflow.add_node(f"player_vote_{pid}", partial(player_vote, player_id=pid))
+        workflow.add_node(
+            f"player_speech_{pid}",
+            partial(
+                player_speech,
+                player_id=pid,
+                game_config=cfg,
+                metrics=collector,
+            ),
+        )
+        workflow.add_node(
+            f"player_vote_{pid}",
+            partial(
+                player_vote,
+                player_id=pid,
+                game_config=cfg,
+                metrics=collector,
+            ),
+        )
 
     # Basic skeleton
     workflow.add_edge(START, "host_setup")
@@ -161,27 +209,40 @@ def build_workflow_with_players(players: list[str], *, checkpointer=None):
     return app
 
 
-def build_workflow(config=None):
+def build_workflow(
+    *,
+    dependencies: GameDependencies | None = None,
+    config=None,
+    metrics=None,
+):
     """Build workflow for LangGraph Server - accepts RunnableConfig parameter.
 
     For LangGraph Server, we build a workflow using the player count from config.yaml.
     The frontend will get the actual player list from the game state.
     """
-    # Load configuration to get the configured player count
-    game_config = get_config()
+    deps = _resolve_dependencies(
+        dependencies=dependencies,
+        config=config,
+        metrics=metrics,
+    )
+    game_config = deps.config
 
     # Generate player names based on configuration
     players = game_config.generate_player_names()
 
     logger.info("Building workflow with %d players: %s", len(players), players)
 
-    return build_workflow_with_players(players)
+    return build_workflow_with_players(
+        players,
+        dependencies=deps,
+    )
 
 
 def main():
     """Main execution function using configuration."""
     # Load configuration
-    config = get_config()
+    deps = build_dependencies()
+    config = deps.config
 
     # Generate player names based on configuration
     players = config.generate_player_names()
@@ -192,7 +253,7 @@ def main():
     logger.info("Vocabulary pairs: %d", len(config.vocabulary))
 
     # Build and run the workflow
-    app = build_workflow_with_players(players)
+    app = build_workflow_with_players(players, dependencies=deps)
     save_graph_image(app, filename="artifacts/agent_with_router.png")
 
     initial_state = {

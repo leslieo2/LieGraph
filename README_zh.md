@@ -175,14 +175,17 @@ game:
 - 单局摘要：`logs/metrics/{game_id}.json`
 - 全局聚合与函数版总分：`logs/metrics/overall.json`
 
-在代码中可直接访问实时指标：
+在代码中可通过依赖容器访问实时指标：
 
 ```python
-from src.game.metrics import metrics_collector
+from src.game.dependencies import build_dependencies
 
-report = metrics_collector.get_overall_metrics()
-score = metrics_collector.compute_quality_score()  # 函数评分
-# metrics_collector.compute_quality_score(method="llm", llm=client) 可获取 LLM 评价
+deps = build_dependencies()
+collector = deps.metrics
+
+report = collector.get_overall_metrics()
+score = collector.compute_quality_score()  # 函数评分
+# collector.compute_quality_score(method="llm", llm=client) 可获取 LLM 评价
 ```
 
 这些数据可作为后续提示词评估或离线分析的直接输入。
