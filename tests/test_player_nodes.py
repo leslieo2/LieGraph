@@ -3,6 +3,8 @@ from typing import Dict
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from src.game.config import load_config
+from src.game.metrics import GameMetrics
 from src.game.nodes.player import player_speech, player_vote
 from src.game.state import (
     GameState,
@@ -39,6 +41,18 @@ def make_player_private_state(
         "assigned_word": assigned_word,
         "playerMindset": mindset or make_player_mindset(),
     }
+
+
+@pytest.fixture
+def game_config():
+    return load_config()
+
+
+@pytest.fixture
+def metrics():
+    collector = GameMetrics()
+    collector.set_enabled(False)
+    return collector
 
 
 @pytest.fixture
@@ -106,7 +120,13 @@ def base_player_state(player_id):
 @patch("src.game.nodes.player.llm_generate_speech", new_callable=AsyncMock)
 @patch("src.game.nodes.player.llm_update_player_mindset", new_callable=AsyncMock)
 def test_player_speech(
-    mock_infer, mock_speech, mock_get_llm, player_id, base_player_state: GameState
+    mock_infer,
+    mock_speech,
+    mock_get_llm,
+    player_id,
+    base_player_state: GameState,
+    game_config,
+    metrics,
 ):
     """Tests the player_speech node with mocked LLM calls."""
     # Arrange: Configure mocks to return predictable values
@@ -120,7 +140,14 @@ def test_player_speech(
     mock_speech.return_value = "This is a test speech."
 
     # Act: Call the player_speech node
-    update = asyncio.run(player_speech(base_player_state, player_id))
+    update = asyncio.run(
+        player_speech(
+            base_player_state,
+            player_id,
+            game_config=game_config,
+            metrics=metrics,
+        )
+    )
 
     # Assert: Verify the output is correct
     assert "completed_speeches" in update
@@ -143,7 +170,13 @@ def test_player_speech(
 @patch("src.game.nodes.player.llm_update_player_mindset", new_callable=AsyncMock)
 @patch("src.game.nodes.player.llm_decide_vote", new_callable=AsyncMock)
 def test_player_vote(
-    mock_decide_vote, mock_infer, mock_get_llm, player_id, base_player_state: GameState
+    mock_decide_vote,
+    mock_infer,
+    mock_get_llm,
+    player_id,
+    base_player_state: GameState,
+    game_config,
+    metrics,
 ):
     """Tests the player_vote node with mocked LLM calls."""
     # Arrange: Configure mocks
@@ -163,7 +196,14 @@ def test_player_vote(
     }
 
     # Act: Call the player_vote node
-    update = asyncio.run(player_vote(voting_state, player_id))
+    update = asyncio.run(
+        player_vote(
+            voting_state,
+            player_id,
+            game_config=game_config,
+            metrics=metrics,
+        )
+    )
 
     # Assert: Verify the output
     assert "current_votes" in update
@@ -187,24 +227,45 @@ def test_player_vote(
     )
 
 
-def test_player_speech_not_in_speaking_phase(base_player_state: GameState):
+def test_player_speech_not_in_speaking_phase(
+    base_player_state: GameState, game_config, metrics
+):
     """Tests that player_speech returns empty dict if not in speaking phase."""
     state = base_player_state | {"game_phase": "voting"}
-    update = asyncio.run(player_speech(state, "a"))
+    update = asyncio.run(
+        player_speech(state, "a", game_config=game_config, metrics=metrics)
+    )
     assert update == {}
 
 
-def test_player_vote_not_in_voting_phase(base_player_state: GameState):
+def test_player_vote_not_in_voting_phase(
+    base_player_state: GameState,
+    game_config,
+    metrics,
+):
     """Tests that player_vote returns empty dict if not in voting phase."""
     state = base_player_state | {"game_phase": "speaking"}
-    update = asyncio.run(player_vote(state, "a"))
+    update = asyncio.run(
+        player_vote(state, "a", game_config=game_config, metrics=metrics)
+    )
     assert update == {}
 
 
-def test_player_node_for_eliminated_player(base_player_state: GameState):
+def test_player_node_for_eliminated_player(
+    base_player_state: GameState, game_config, metrics
+):
     """Tests that nodes do nothing for an eliminated player."""
     state = base_player_state | {"eliminated_players": ["a"]}
-    speech_update = asyncio.run(player_speech(state, "a"))
-    vote_update = asyncio.run(player_vote(state | {"game_phase": "voting"}, "a"))
+    speech_update = asyncio.run(
+        player_speech(state, "a", game_config=game_config, metrics=metrics)
+    )
+    vote_update = asyncio.run(
+        player_vote(
+            state | {"game_phase": "voting"},
+            "a",
+            game_config=game_config,
+            metrics=metrics,
+        )
+    )
     assert speech_update == {}
     assert vote_update == {}

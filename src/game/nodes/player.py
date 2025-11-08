@@ -21,11 +21,9 @@ Integration Points:
 """
 
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 
 from src.tools.llm import create_llm
-from ..config import get_config
-from ..metrics import metrics_collector
 from ..state import (
     GameState,
     alive_players,
@@ -49,6 +47,10 @@ from .helpers import (
     get_private_state,
     get_normalized_player_mindset,
 )
+
+if TYPE_CHECKING:
+    from ..config import GameConfig
+    from ..metrics import GameMetrics
 
 logger = get_logger(__name__)
 
@@ -98,7 +100,13 @@ def _create_player_private_state_delta(
     }
 
 
-async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
+async def player_speech(
+    state: GameState,
+    player_id: str,
+    *,
+    game_config: "GameConfig",
+    metrics: "GameMetrics",
+) -> Dict[str, Any]:
     """
     Player node for generating speech.
     Calls LLM to infer identity and generate speech.
@@ -119,7 +127,6 @@ async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     logger.debug("Player %s assigned word: %s", player_id, my_word)
 
     # Generate playerMindset using LLM
-    config = get_config()
     existing_player_mindset = get_normalized_player_mindset(existing_private_state)
 
     llm_client = _get_llm_client()
@@ -130,7 +137,7 @@ async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
         players=state["players"],
         alive=alive_players(state),
         me=player_id,
-        rules=config.get_game_rules(),
+        rules=game_config.get_game_rules(),
         existing_player_mindset=existing_player_mindset,
     )
 
@@ -166,15 +173,15 @@ async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     # Prepare the state updates based on the generated speech and PlayerMindset
     speech_record: Speech = create_speech_record(state, player_id, new_speech_text)
 
-    if metrics_collector.enabled:
-        metrics_collector.on_player_mindset_update(
+    if metrics.enabled:
+        metrics.on_player_mindset_update(
             game_id=state.get("game_id"),
             round_number=state["current_round"],
             phase=state["game_phase"],
             player_id=player_id,
             mindset=updated_mindset_state,
         )
-        metrics_collector.on_speech(
+        metrics.on_speech(
             game_id=state.get("game_id"),
             round_number=state["current_round"],
             player_id=player_id,
@@ -191,7 +198,13 @@ async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     }
 
 
-async def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
+async def player_vote(
+    state: GameState,
+    player_id: str,
+    *,
+    game_config: "GameConfig",
+    metrics: "GameMetrics",
+) -> Dict[str, Any]:
     """
     Player node for casting a vote.
     Calls LLM to infer identity and decide vote target.
@@ -212,7 +225,6 @@ async def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     logger.debug("Player %s assigned word: %s", player_id, my_word)
 
     # Generate playerMindset using LLM
-    config = get_config()
     existing_player_mindset = get_normalized_player_mindset(existing_private_state)
 
     llm_client = _get_llm_client()
@@ -223,7 +235,7 @@ async def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
         players=state["players"],
         alive=alive_players(state),
         me=player_id,
-        rules=config.get_game_rules(),
+        rules=game_config.get_game_rules(),
         existing_player_mindset=existing_player_mindset,
     )
     updated_mindset_state = normalize_mindset(updated_mindset)
@@ -243,8 +255,8 @@ async def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     # Prepare the state updates based on the decided vote and PlayerMindset
     ts = int(datetime.now().timestamp() * 1000)
 
-    if metrics_collector.enabled:
-        metrics_collector.on_player_mindset_update(
+    if metrics.enabled:
+        metrics.on_player_mindset_update(
             game_id=state.get("game_id"),
             round_number=state["current_round"],
             phase=state["game_phase"],

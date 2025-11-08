@@ -22,7 +22,7 @@ import random
 from collections import Counter
 from typing import List, Dict, Any
 
-from .config import get_config, calculate_spy_count
+from .config import DEFAULT_CONFIG, calculate_spy_count
 from .logger import get_logger
 from .state import (
     GameState,
@@ -71,8 +71,8 @@ def assign_roles_and_words(
     elif word_list:
         civilian_word, spy_word = random.choice(word_list)
     else:
-        word_list = get_config().vocabulary
-        civilian_word, spy_word = random.choice(word_list)
+        default_vocab = DEFAULT_CONFIG["game"]["vocabulary"]
+        civilian_word, spy_word = random.choice(default_vocab)
 
     # 2. Prepare private states
     player_private_states: Dict[str, PlayerPrivateState] = {}
