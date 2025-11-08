@@ -5,6 +5,8 @@ Coordinates prompt building, context construction, and LLM interaction
 for player mindset updates and speech generation.
 """
 
+import asyncio
+import inspect
 from typing import Any, List, Dict, Sequence, cast
 from venv import logger
 
@@ -40,6 +42,20 @@ from src.game.strategy.builders.prompt_builder import (
 from src.game.strategy.utils.text_utils import sanitize_speech_output
 
 
+async def _invoke_async(target: Any, *args: Any, **kwargs: Any) -> Any:
+    """Awaitably invoke LangChain runnables, falling back to sync methods."""
+    ainvoke = getattr(target, "ainvoke", None)
+    if callable(ainvoke):
+        result = ainvoke(*args, **kwargs)
+        return await result if inspect.isawaitable(result) else result
+
+    invoke = getattr(target, "invoke", None)
+    if callable(invoke):
+        return await asyncio.to_thread(invoke, *args, **kwargs)
+
+    raise AttributeError(f"Object {target!r} has neither ainvoke nor invoke.")
+
+
 def _to_mindset_model(
     mindset: PlayerMindset | PlayerMindsetModel | None,
 ) -> PlayerMindsetModel:
@@ -64,7 +80,7 @@ def _mindset_model_to_state(model: PlayerMindsetModel) -> PlayerMindset:
     return cast(PlayerMindset, model.model_dump())
 
 
-def llm_update_player_mindset(
+async def llm_update_player_mindset(
     llm_client: Any,
     my_word: str,
     completed_speeches: Sequence[Speech],
@@ -127,7 +143,7 @@ def llm_update_player_mindset(
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_context),
         ]
-        result = agent.invoke({"messages": messages})
+        result = await _invoke_async(agent, {"messages": messages})
 
         # Extract structured response from agent result
         structured = result.get("structured_response")
@@ -154,7 +170,7 @@ def llm_update_player_mindset(
     return existing_state
 
 
-def llm_generate_speech(
+async def llm_generate_speech(
     llm_client: Any,
     my_word: str,
     self_belief: SelfBelief,
@@ -197,7 +213,7 @@ def llm_generate_speech(
         HumanMessage(content=user_context),
     ]
 
-    response = llm_client.invoke(messages)
+    response = await _invoke_async(llm_client, messages)
 
     raw_text = response.content if hasattr(response, "content") else response
     return sanitize_speech_output(raw_text)
@@ -223,7 +239,7 @@ def plan_player_speech(
     return planner.func()
 
 
-def llm_decide_vote(
+async def llm_decide_vote(
     llm_client: Any,
     state: GameState,
     me: str,
@@ -274,13 +290,14 @@ def llm_decide_vote(
     )
 
     try:
-        result = agent.invoke(
+        result = await _invoke_async(
+            agent,
             {
                 "messages": [
                     SystemMessage(content=system_prompt),
                     HumanMessage(content=vote_context),
                 ]
-            }
+            },
         )
         structured = result.get("structured_response")
         if structured:

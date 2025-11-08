@@ -95,7 +95,7 @@ def _create_player_private_state_delta(
     }
 
 
-def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
+async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     """
     Player node for generating speech.
     Calls LLM to infer identity and generate speech.
@@ -120,7 +120,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     existing_player_mindset = get_normalized_player_mindset(existing_private_state)
 
     llm_client = _get_llm_client()
-    updated_mindset = llm_update_player_mindset(
+    updated_mindset = await llm_update_player_mindset(
         llm_client=llm_client,
         my_word=my_word,
         completed_speeches=state["completed_speeches"],
@@ -142,7 +142,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
         speech_plan = None
 
     # Generate speech using LLM
-    new_speech_text = llm_generate_speech(
+    new_speech_text = await llm_generate_speech(
         llm_client=llm_client,
         my_word=my_word,
         self_belief=updated_mindset_state.get("self_belief", {}),
@@ -186,7 +186,7 @@ def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     }
 
 
-def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
+async def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     """
     Player node for casting a vote.
     Calls LLM to infer identity and decide vote target.
@@ -211,7 +211,7 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     existing_player_mindset = get_normalized_player_mindset(existing_private_state)
 
     llm_client = _get_llm_client()
-    updated_mindset = llm_update_player_mindset(
+    updated_mindset = await llm_update_player_mindset(
         llm_client=llm_client,
         my_word=my_word,
         completed_speeches=state["completed_speeches"],
@@ -223,7 +223,7 @@ def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     )
     updated_mindset_state = normalize_mindset(updated_mindset)
     # Decide on a vote target using the LLM with bound voting tools
-    voted_target = llm_decide_vote(
+    voted_target = await llm_decide_vote(
         llm_client=llm_client,
         state=state,
         me=player_id,

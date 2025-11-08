@@ -15,6 +15,7 @@ score computation—lives here.
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -736,7 +737,11 @@ def _run_single_multilingual_game(
     }
 
     run_config = RunnableConfig(configurable={"thread_id": game_id})
-    app.invoke(initial_state, config=run_config)
+
+    async def _run_game():
+        await app.ainvoke(initial_state, config=run_config)
+
+    asyncio.run(_run_game())
 
 
 def run_multilingual_metrics_batch(
