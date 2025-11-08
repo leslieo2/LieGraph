@@ -1,5 +1,6 @@
+import asyncio
 from typing import Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.game.strategy import llm_update_player_mindset
 from src.game.strategy.builders.prompt_builder import (
@@ -206,39 +207,45 @@ def test_llm_update_player_mindset_success():
     """Tests successful belief inference with structured output."""
     # Mock the agent's invoke method to return structured response
     mock_agent = MagicMock()
-    mock_agent.invoke.return_value = {
-        "structured_response": make_player_mindset(
-            self_belief=make_self_belief("civilian", 0.9),
-            suspicions={"b": make_suspicion("spy", 0.7, "Suspicious speech")},
-        )
-    }
+    mock_agent.ainvoke = AsyncMock(
+        return_value={
+            "structured_response": make_player_mindset(
+                self_belief=make_self_belief("civilian", 0.9),
+                suspicions={"b": make_suspicion("spy", 0.7, "Suspicious speech")},
+            )
+        }
+    )
 
     # Mock create_agent to return our mock agent
     with patch("src.game.strategy.strategy_core.create_agent", return_value=mock_agent):
         mock_llm = MagicMock()
         test_state = mock_state_inference_en.copy()
-        result = llm_update_player_mindset(llm_client=mock_llm, **test_state)
+        result = asyncio.run(
+            llm_update_player_mindset(llm_client=mock_llm, **test_state)
+        )
 
         assert result["self_belief"]["role"] == "civilian"
         assert result["suspicions"]["b"]["reason"] == "Suspicious speech"
-        mock_agent.invoke.assert_called_once()
+        mock_agent.ainvoke.assert_awaited_once()
 
 
 def test_llm_update_player_mindset_failure():
     """Tests fallback behavior when structured output extraction fails for inference."""
     # Mock the agent's invoke method to return None (simulating failure)
     mock_agent = MagicMock()
-    mock_agent.invoke.return_value = {"structured_response": None}
+    mock_agent.ainvoke = AsyncMock(return_value={"structured_response": None})
 
     # Mock create_agent to return our mock agent
     with patch("src.game.strategy.strategy_core.create_agent", return_value=mock_agent):
         mock_llm = MagicMock()
         test_state = mock_state_inference_en.copy()
-        result = llm_update_player_mindset(llm_client=mock_llm, **test_state)
+        result = asyncio.run(
+            llm_update_player_mindset(llm_client=mock_llm, **test_state)
+        )
 
         assert result["self_belief"]["role"] == "civilian"
         assert (
             result["self_belief"]["confidence"]
             == mock_player_mindset["self_belief"]["confidence"]
         )
-        mock_agent.invoke.assert_called_once()
+        mock_agent.ainvoke.assert_awaited_once()

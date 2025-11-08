@@ -17,6 +17,7 @@ Architecture:
 - Private state management for player mindsets and game setup
 """
 
+import asyncio
 from functools import partial
 from uuid import uuid4
 
@@ -200,7 +201,11 @@ def main():
     langgraph_config = RunnableConfig(
         configurable={"thread_id": initial_state["game_id"]},
     )
-    result = app.invoke(initial_state, config=langgraph_config)
+
+    async def _run_workflow():
+        return await app.ainvoke(initial_state, config=langgraph_config)
+
+    result = asyncio.run(_run_workflow())
     print(result)
 
 
