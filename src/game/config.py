@@ -22,6 +22,8 @@ from typing import Any, Dict, List, Tuple
 import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from .logger import get_logger
+
 
 class ConfigurationError(RuntimeError):
     """Raised when configuration cannot be loaded or validated."""
@@ -256,12 +258,13 @@ class GameConfig:
                 raise ValueError("Name generation failed")
             return True
         except Exception as exc:
-            print(f"Configuration validation failed: {exc}")
+            logger.error("Configuration validation failed: %s", exc)
             return False
 
 
 # Global configuration instance
 _config_instance: GameConfig | None = None
+logger = get_logger(__name__)
 
 
 def get_config(config_path: str | Path | None = None) -> GameConfig:

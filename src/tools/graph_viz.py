@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
+from src.game.logger import get_logger
+
 try:  # Imported lazily so pure-Python usage works without IPython.
     from IPython import get_ipython
     from IPython.display import Image, display
@@ -25,7 +27,7 @@ def save_png(png_bytes: bytes, filename: str | Path = "graph.png") -> Path:
     output_path = Path(filename)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(png_bytes)
-    print(f"Graph saved to {output_path}")
+    logger.info("Graph saved to %s", output_path)
 
     if get_ipython and Image and display and get_ipython():
         display(Image(png_bytes))
@@ -41,6 +43,9 @@ def save_graph_image(
     try:
         png_bytes = graph.draw_mermaid_png()
     except ValueError as exc:  # Mermaid service may be unavailable in offline runs.
-        print(f"Skipping graph image generation: {exc}")
+        logger.warning("Skipping graph image generation: %s", exc)
         return None
     return save_png(png_bytes, filename)
+
+
+logger = get_logger(__name__)

@@ -26,12 +26,15 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import START
 from langgraph.graph import END, StateGraph
 
+from src.game.logger import get_logger
 from src.game.nodes.host import host_setup, host_stage_switch, host_result
 from src.game.nodes.player import player_speech, player_vote
 from src.game.nodes.transition import check_votes_and_transition
 from src.game.state import GameState, votes_ready, next_alive_player
 from src.tools import save_graph_image
 from src.game.config import get_config
+
+logger = get_logger(__name__)
 
 
 def route_from_stage(state: GameState) -> list[str] | str:
@@ -170,7 +173,7 @@ def build_workflow(config=None):
     # Generate player names based on configuration
     players = game_config.generate_player_names()
 
-    print(f"🎮 Building workflow with {len(players)} players: {players}")
+    logger.info("Building workflow with %d players: %s", len(players), players)
 
     return build_workflow_with_players(players)
 
@@ -183,10 +186,10 @@ def main():
     # Generate player names based on configuration
     players = config.generate_player_names()
 
-    print(f"Game Configuration:")
-    print(f"  Player count: {config.player_count}")
-    print(f"  Players: {players}")
-    print(f"  Vocabulary pairs: {len(config.vocabulary)}")
+    logger.info("Game configuration loaded")
+    logger.info("Player count: %d", config.player_count)
+    logger.debug("Players: %s", players)
+    logger.info("Vocabulary pairs: %d", len(config.vocabulary))
 
     # Build and run the workflow
     app = build_workflow_with_players(players)
@@ -206,7 +209,7 @@ def main():
         return await app.ainvoke(initial_state, config=langgraph_config)
 
     result = asyncio.run(_run_workflow())
-    print(result)
+    logger.info("Workflow result: %s", result)
 
 
 if __name__ == "__main__":
