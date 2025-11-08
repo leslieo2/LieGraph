@@ -29,6 +29,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from threading import Lock
 
+from .logger import get_logger
 from .state import PlayerMindset
 
 
@@ -694,6 +695,7 @@ class GameMetrics:
 
 # Global collector used by the rest of the codebase.
 metrics_collector = GameMetrics()
+logger = get_logger(__name__)
 
 MULTILINGUAL_VOCABULARY_BATCH: List[tuple[str, tuple[str, str]]] = [
     ("english", ("lighthouse", "windmill")),
@@ -722,8 +724,12 @@ def _run_single_multilingual_game(
     app = build_workflow_with_players(player_list)
 
     game_id = f"metrics-{idx}-{language_tag}"
-    print(
-        f"\nStarting game {idx}/5 ({language_tag}) with civilian='{civilian_word}' and spy='{spy_word}'"
+    logger.info(
+        "Starting metrics game %d/5 (%s) civilian='%s' spy='%s'",
+        idx,
+        language_tag,
+        civilian_word,
+        spy_word,
     )
 
     initial_state = {
@@ -794,10 +800,13 @@ def run_multilingual_metrics_batch(
     overall_metrics = metrics_collector.get_overall_metrics()
     quality_score = metrics_collector.compute_quality_score()
 
-    print("\nOverall metrics:")
-    print(json.dumps(overall_metrics, ensure_ascii=False, indent=2))
-    print("\nQuality score:")
-    print(json.dumps(quality_score, ensure_ascii=False, indent=2))
+    logger.info(
+        "Overall metrics:\n%s",
+        json.dumps(overall_metrics, ensure_ascii=False, indent=2),
+    )
+    logger.info(
+        "Quality score:\n%s", json.dumps(quality_score, ensure_ascii=False, indent=2)
+    )
 
     result = {"metrics": overall_metrics, "quality_score": quality_score}
     metrics_collector.set_enabled(previous_state)
@@ -913,10 +922,14 @@ def main():
             metrics_dir=metrics_dir,
             output_path=output_path,
         )
-        print("\nAggregated historical metrics:")
-        print(json.dumps(result["metrics"], ensure_ascii=False, indent=2))
-        print("\nQuality score:")
-        print(json.dumps(result["quality_score"], ensure_ascii=False, indent=2))
+        logger.info(
+            "Aggregated historical metrics:\n%s",
+            json.dumps(result["metrics"], ensure_ascii=False, indent=2),
+        )
+        logger.info(
+            "Quality score:\n%s",
+            json.dumps(result["quality_score"], ensure_ascii=False, indent=2),
+        )
         return result
 
     # Default: run multilingual batch

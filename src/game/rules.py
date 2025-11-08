@@ -23,6 +23,7 @@ from collections import Counter
 from typing import List, Dict, Any
 
 from .config import get_config, calculate_spy_count
+from .logger import get_logger
 from .state import (
     GameState,
     alive_players,
@@ -31,6 +32,8 @@ from .state import (
     PlayerMindset,
     SelfBelief,
 )
+
+logger = get_logger(__name__)
 
 
 def assign_roles_and_words(
@@ -60,8 +63,10 @@ def assign_roles_and_words(
     ):
         civilian_word = host_private_state["civilian_word"]
         spy_word = host_private_state["spy_word"]
-        print(
-            f"🎮 Using custom words from host_private_state: civilian='{civilian_word}', spy='{spy_word}'"
+        logger.info(
+            "Using custom words from host_private_state civilian='%s' spy='%s'",
+            civilian_word,
+            spy_word,
         )
     elif word_list:
         civilian_word, spy_word = random.choice(word_list)
@@ -127,7 +132,9 @@ def calculate_eliminated_player(state: GameState) -> str | None:
 
     if tied_players:
         eliminated = random.choice(tied_players)
-        print(f"🎮 Break tie：from {tied_players} chose {eliminated}")
+        logger.info(
+            "Tie detected among %s; randomly eliminated %s", tied_players, eliminated
+        )
         return eliminated
 
     return None

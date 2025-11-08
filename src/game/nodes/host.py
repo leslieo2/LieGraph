@@ -8,7 +8,10 @@ from ..rules import (
     calculate_eliminated_player,
     determine_winner,
 )
+from ..logger import get_logger
 from .helpers import get_assigned_word
+
+logger = get_logger(__name__)
 
 
 def host_setup(state: GameState) -> Dict[str, Any]:
@@ -29,12 +32,11 @@ def host_setup(state: GameState) -> Dict[str, Any]:
         player_list, host_private_state=host_private_state
     )
 
-    # Debug output
-    print(f"🎮 Host: Initializing game, {len(player_list)} players")
-    print(f"   Players: {player_list}")
+    logger.info("Host initializing game with %d players", len(player_list))
+    logger.debug("Initial player list: %s", player_list)
     for player_id, private_state in assignments["player_private_states"].items():
         assigned_word = get_assigned_word(private_state)
-        print(f"   Player {player_id}: Assigned word = {assigned_word}")
+        logger.debug("Assigned word for %s: %s", player_id, assigned_word)
 
     if metrics_collector.enabled:
         metrics_collector.on_game_start(
@@ -68,13 +70,13 @@ def host_stage_switch(state: GameState) -> Dict[str, Any]:
         next_player = next_alive_player(state)
         if next_player:
             # There's another player to speak
-            print(f"🎮 Stage switch: Next speaker is {next_player}")
+            logger.info("Stage switch selecting next speaker: %s", next_player)
             return (
                 {}
             )  # No state update needed - next_alive_player is computed dynamically
         else:
             # All players have spoken, transition to voting
-            print(f"🎮 Stage switch: All players have spoken, starting voting")
+            logger.info("Stage switch detected all speeches complete; starting voting")
             updates = {"game_phase": "voting", "current_votes": {}}
             updates["phase_id"] = generate_phase_id(
                 state | updates
@@ -91,10 +93,12 @@ def host_result(state: GameState) -> Dict[str, Any]:
     """
     eliminated_player = calculate_eliminated_player(state)
 
-    print(
-        f"🎮 Host Round {state['current_round']} - Voted out player: {eliminated_player}"
+    logger.info(
+        "Host round %d voted out player: %s",
+        state["current_round"],
+        eliminated_player,
     )
-    print(f"   Current votes: {state.get('current_votes', {})}")
+    logger.debug("Current votes: %s", state.get("current_votes", {}))
 
     # Create a temporary state to check for a winner after the potential elimination
     temp_state = cast(GameState, state.copy())
@@ -107,7 +111,7 @@ def host_result(state: GameState) -> Dict[str, Any]:
     winner = determine_winner(temp_state, state["host_private_state"])
 
     if winner:
-        print(f"🎮 Host announces result: Game over! Winner: {winner}")
+        logger.info("Winner determined: %s", winner)
         if metrics_collector.enabled:
             metrics_collector.on_game_end(
                 game_id=state.get("game_id"),
@@ -119,7 +123,7 @@ def host_result(state: GameState) -> Dict[str, Any]:
         return update
 
     # No winner, advance to the next round
-    print(f"🎮 Game not over: Round {state['current_round'] + 1}")
+    logger.info("No winner; advancing to round %d", state["current_round"] + 1)
     return _prepare_next_round(state, eliminated_player)
 
 
@@ -136,7 +140,7 @@ def _prepare_next_round(state: GameState, eliminated: str | None) -> Dict[str, A
     if eliminated:
         updates["eliminated_players"] = [eliminated]
 
-    print(f"🎮 ADVANCE ROUND: Moving to round {updates['current_round']}")
+    logger.info("Advancing to round %d", updates["current_round"])
     if eliminated:
-        print(f"   Voted out player: {eliminated}")
+        logger.info("Eliminated player carried forward: %s", eliminated)
     return updates

@@ -43,11 +43,14 @@ from ..strategy import (
     plan_player_speech,
 )
 from ..strategy.serialization import normalize_mindset
+from ..logger import get_logger
 from .helpers import (
     get_assigned_word,
     get_private_state,
     get_normalized_player_mindset,
 )
+
+logger = get_logger(__name__)
 
 
 def _get_llm_client():
@@ -110,10 +113,10 @@ async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     # Get player-specific context
     _, existing_private_state, my_word = _get_player_context(state, player_id)
 
-    print(
-        f"🎤 PLAYER SPEECH: {player_id} is generating speech for round {state['current_round']}"
+    logger.info(
+        "Player %s generating speech for round %d", player_id, state["current_round"]
     )
-    print(f"   Assigned word: {my_word}")
+    logger.debug("Player %s assigned word: %s", player_id, my_word)
 
     # Generate playerMindset using LLM
     config = get_config()
@@ -136,8 +139,10 @@ async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
     try:
         speech_plan = plan_player_speech(state, player_id, updated_mindset_state)
     except Exception as exc:
-        print(
-            f"⚠️ SPEECH PLAN TOOL failed for {player_id}: {exc}, falling back without plan."
+        logger.warning(
+            "Speech planning tool failed for %s; proceeding without plan: %s",
+            player_id,
+            exc,
         )
         speech_plan = None
 
@@ -154,9 +159,9 @@ async def player_speech(state: GameState, player_id: str) -> Dict[str, Any]:
         speech_plan=speech_plan,
     )
 
-    print(f'🎤 PLAYER SPEECH: {player_id} says: "{new_speech_text}"')
-    print(f"   Self belief: {updated_mindset_state.get('self_belief')}")
-    print(f"   Suspicions: {updated_mindset_state.get('suspicions')}")
+    logger.info('Player %s speech: "%s"', player_id, new_speech_text)
+    logger.debug("Self belief: %s", updated_mindset_state.get("self_belief"))
+    logger.debug("Suspicions: %s", updated_mindset_state.get("suspicions"))
 
     # Prepare the state updates based on the generated speech and PlayerMindset
     speech_record: Speech = create_speech_record(state, player_id, new_speech_text)
@@ -201,10 +206,10 @@ async def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
     # Get player-specific context for voting
     _, existing_private_state, my_word = _get_player_context(state, player_id)
 
-    print(
-        f"🗳️  PLAYER VOTE: {player_id} is deciding vote for round {state['current_round']}"
+    logger.info(
+        "Player %s deciding vote for round %d", player_id, state["current_round"]
     )
-    print(f"   Assigned word: {my_word}")
+    logger.debug("Player %s assigned word: %s", player_id, my_word)
 
     # Generate playerMindset using LLM
     config = get_config()
@@ -231,9 +236,9 @@ async def player_vote(state: GameState, player_id: str) -> Dict[str, Any]:
         current_mindset=updated_mindset_state,
     )
 
-    print(f"🗳️  PLAYER VOTE: {player_id} votes for: {voted_target}")
-    print(f"   Self belief: {updated_mindset_state.get('self_belief')}")
-    print(f"   Suspicions: {updated_mindset_state.get('suspicions')}")
+    logger.info("Player %s votes for %s", player_id, voted_target)
+    logger.debug("Self belief: %s", updated_mindset_state.get("self_belief"))
+    logger.debug("Suspicions: %s", updated_mindset_state.get("suspicions"))
 
     # Prepare the state updates based on the decided vote and PlayerMindset
     ts = int(datetime.now().timestamp() * 1000)

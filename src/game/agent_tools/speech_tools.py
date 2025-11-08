@@ -13,12 +13,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from langchain.tools import tool
 
+from src.game.logger import get_logger
 from src.game.state import GameState, PlayerMindset, alive_players
 from src.game.strategy.builders.prompt_builder import determine_clarity
 from src.game.strategy.serialization import normalize_mindset, to_plain_dict
 
 SelfBeliefDict = Dict[str, Any]
 SuspicionDict = Dict[str, Any]
+
+logger = get_logger(__name__)
 
 
 def speech_planning_tools(
@@ -157,12 +160,12 @@ def speech_planning_tools(
             "top_suspicions": suspects_payload,
         }
 
-        print(
-            "🛠️ SPEECH PLAN TOOL:",
-            f"player={bound_player_id}",
-            f"round={current_round}",
-            f"clarity={clarity_code}",
-            f"goal={goal.get('label')}",
+        logger.info(
+            "Speech plan tool executed for %s round %d clarity=%s goal=%s",
+            bound_player_id,
+            current_round,
+            clarity_code,
+            goal.get("label"),
         )
 
         return plan
